@@ -4,8 +4,8 @@ module top(input  clk, reset,
   
   wire [31:0] PC, Instr, ReadData; 
   
-  // instantiate processor and memories
-  riscvsingle rvsingle(
+  // instantiate pipelined processor and memories
+  riscvpipe rvpipe(
     .clk(clk), 
     .reset(reset), 
     .PC(PC), 

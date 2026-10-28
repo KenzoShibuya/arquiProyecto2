@@ -1,6 +1,5 @@
 module datapath(
-    input         clk,
-    input         reset,
+    input         clk, reset,
     // Control inputs from controller (Decode stage)
     input  [1:0]  ResultSrcD,
     input         ALUSrcD,
@@ -10,7 +9,7 @@ module datapath(
     input         BranchD,
     input  [1:0]  ImmSrcD,
     input  [2:0]  ALUControlD,
-    // Instruction outputs to controller for decoding
+    // Instruction output to controller (Decode stage)
     output [31:0] InstrD,
     // Memory interface
     output [31:0] PCF,
@@ -23,24 +22,22 @@ module datapath(
 
   localparam WIDTH = 32;
 
-  // -------------------------------------------------------
-  // Signals declaration
-  // -------------------------------------------------------
+  // Signals Declaration
+
   // IF stage
   wire [31:0] PCNextF, PCPlus4F;
 
   // ID stage
   wire [31:0] PCD, PCPlus4D;
   wire [31:0] RD1D, RD2D, ImmExtD;
-  wire [4:0]  Rs1D, Rs2D, RdD;
 
   // EX stage
   wire        RegWriteE, MemWriteE, JumpE, BranchE, ALUSrcE;
   wire [1:0]  ResultSrcE;
   wire [2:0]  ALUControlE;
   wire [31:0] RD1E, RD2E, PCE, ImmExtE, PCPlus4E;
-  wire [4:0]  Rs1E, Rs2E, RdE;
-  wire [31:0] SrcAE, SrcBE, WriteDataE;
+  wire [4:0]  RdE;
+  wire [31:0] SrcBE;
   wire [31:0] ALUResultE, PCTargetE;
   wire        ZeroE, PCSrcE;
 
@@ -57,9 +54,9 @@ module datapath(
   wire [4:0]  RdW;
   wire [31:0] ResultW;
 
-  // -------------------------------------------------------
-  // 1. Fetch Stage (IF)
-  // -------------------------------------------------------
+
+  // 1. Fetch (IF)
+
   mux2 #(WIDTH) pcmux(
     .d0(PCPlus4F),
     .d1(PCTargetE),
@@ -80,34 +77,36 @@ module datapath(
     .y(PCPlus4F)
   );
 
-  // -------------------------------------------------------
-  // Pipeline Register IF/ID
-  // -------------------------------------------------------
-  pipe_if_id reg_if_id(
+  // Pipeline Register IF / ID
+  flopr #(32) pcd_reg(
     .clk(clk),
     .reset(reset),
-    .clear(1'b0),
-    .en(1'b1),
-    .PCF(PCF),
-    .PCPlus4F(PCPlus4F),
-    .InstrF(InstrF),
-    .PCD(PCD),
-    .PCPlus4D(PCPlus4D),
-    .InstrD(InstrD)
+    .d(PCF),
+    .q(PCD)
   );
 
-  // -------------------------------------------------------
-  // 2. Decode Stage (ID)
-  // -------------------------------------------------------
-  assign Rs1D = InstrD[19:15];
-  assign Rs2D = InstrD[24:20];
-  assign RdD  = InstrD[11:7];
+  flopr #(32) pcplus4d_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(PCPlus4F),
+    .q(PCPlus4D)
+  );
+
+  flopr #(32) instrd_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(InstrF),
+    .q(InstrD)
+  );
+
+
+  // 2. Decode (ID)
 
   regfile rf(
     .clk(clk),
     .we3(RegWriteW),
-    .a1(Rs1D),
-    .a2(Rs2D),
+    .a1(InstrD[19:15]),
+    .a2(InstrD[24:20]),
     .a3(RdW),
     .wd3(ResultW),
     .rd1(RD1D),
@@ -120,65 +119,112 @@ module datapath(
     .immext(ImmExtD)
   );
 
-  // -------------------------------------------------------
-  // Pipeline Register ID/EX
-  // -------------------------------------------------------
-  pipe_id_ex reg_id_ex(
+  // Pipeline Register ID / EX
+
+  // Control signals
+  flopr #(1) regwrite_e_reg(
     .clk(clk),
     .reset(reset),
-    .clear(1'b0),
-    .en(1'b1),
-    // Control in
-    .RegWriteD(RegWriteD),
-    .ResultSrcD(ResultSrcD),
-    .MemWriteD(MemWriteD),
-    .JumpD(JumpD),
-    .BranchD(BranchD),
-    .ALUControlD(ALUControlD),
-    .ALUSrcD(ALUSrcD),
-    // Data in
-    .RD1D(RD1D),
-    .RD2D(RD2D),
-    .PCD(PCD),
-    .Rs1D(Rs1D),
-    .Rs2D(Rs2D),
-    .RdD(RdD),
-    .ImmExtD(ImmExtD),
-    .PCPlus4D(PCPlus4D),
-    // Control out
-    .RegWriteE(RegWriteE),
-    .ResultSrcE(ResultSrcE),
-    .MemWriteE(MemWriteE),
-    .JumpE(JumpE),
-    .BranchE(BranchE),
-    .ALUControlE(ALUControlE),
-    .ALUSrcE(ALUSrcE),
-    // Data out
-    .RD1E(RD1E),
-    .RD2E(RD2E),
-    .PCE(PCE),
-    .Rs1E(Rs1E),
-    .Rs2E(Rs2E),
-    .RdE(RdE),
-    .ImmExtE(ImmExtE),
-    .PCPlus4E(PCPlus4E)
+    .d(RegWriteD),
+    .q(RegWriteE)
   );
 
-  // -------------------------------------------------------
-  // 3. Execute Stage (EX)
-  // -------------------------------------------------------
-  assign SrcAE      = RD1E;
-  assign WriteDataE = RD2E;
+  flopr #(2) resultsrc_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ResultSrcD),
+    .q(ResultSrcE)
+  );
+
+  flopr #(1) memwrite_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(MemWriteD),
+    .q(MemWriteE)
+  );
+
+  flopr #(1) jump_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(JumpD),
+    .q(JumpE)
+  );
+
+  flopr #(1) branch_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(BranchD),
+    .q(BranchE)
+  );
+
+  flopr #(3) alucontrol_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ALUControlD),
+    .q(ALUControlE)
+  );
+
+  flopr #(1) alusrc_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ALUSrcD),
+    .q(ALUSrcE)
+  );
+
+  // Data signals
+  flopr #(32) rd1_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(RD1D),
+    .q(RD1E)
+  );
+
+  flopr #(32) rd2_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(RD2D),
+    .q(RD2E)
+  );
+
+  flopr #(32) pce_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(PCD),
+    .q(PCE)
+  );
+
+  flopr #(5) rde_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(InstrD[11:7]),
+    .q(RdE)
+  );
+
+  flopr #(32) imm_e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ImmExtD),
+    .q(ImmExtE)
+  );
+
+  flopr #(32) pcplus4e_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(PCPlus4D),
+    .q(PCPlus4E)
+  );
+
+  // 3. Execute (EX)
 
   mux2 #(WIDTH) srcbmux(
-    .d0(WriteDataE),
+    .d0(RD2E),
     .d1(ImmExtE),
     .s(ALUSrcE),
     .y(SrcBE)
   );
 
   alu alu_unit(
-    .a(SrcAE),
+    .a(RD1E),
     .b(SrcBE),
     .alucontrol(ALUControlE),
     .result(ALUResultE),
@@ -193,69 +239,112 @@ module datapath(
 
   assign PCSrcE = (BranchE & ZeroE) | JumpE;
 
-  // -------------------------------------------------------
-  // Pipeline Register EX/MEM
-  // -------------------------------------------------------
-  pipe_ex_mem reg_ex_mem(
+  // Pipeline Register EX / MEM 
+
+  // Control signals
+  flopr #(1) regwrite_m_reg(
     .clk(clk),
     .reset(reset),
-    .clear(1'b0),
-    .en(1'b1),
-    // Control in
-    .RegWriteE(RegWriteE),
-    .ResultSrcE(ResultSrcE),
-    .MemWriteE(MemWriteE),
-    // Data in
-    .ALUResultE(ALUResultE),
-    .WriteDataE(WriteDataE),
-    .RdE(RdE),
-    .PCPlus4E(PCPlus4E),
-    // Control out
-    .RegWriteM(RegWriteM),
-    .ResultSrcM(ResultSrcM),
-    .MemWriteM(MemWriteM),
-    // Data out
-    .ALUResultM(ALUResultM),
-    .WriteDataM(WriteDataM),
-    .RdM(RdM),
-    .PCPlus4M(PCPlus4M)
+    .d(RegWriteE),
+    .q(RegWriteM)
   );
 
-  // -------------------------------------------------------
+  flopr #(2) resultsrc_m_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ResultSrcE),
+    .q(ResultSrcM)
+  );
+
+  flopr #(1) memwrite_m_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(MemWriteE),
+    .q(MemWriteM)
+  );
+
+  // Data signals
+  flopr #(32) aluresult_m_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ALUResultE),
+    .q(ALUResultM)
+  );
+
+  flopr #(32) writedata_m_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(RD2E),
+    .q(WriteDataM)
+  );
+
+  flopr #(5) rdm_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(RdE),
+    .q(RdM)
+  );
+
+  flopr #(32) pcplus4m_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(PCPlus4E),
+    .q(PCPlus4M)
+  );
+
   // 4. Memory Stage (MEM)
-  // -------------------------------------------------------
-  // Outputs to data memory are ALUResultM, WriteDataM, MemWriteM
-  // Input from data memory is ReadDataM
 
-  // -------------------------------------------------------
-  // Pipeline Register MEM/WB
-  // -------------------------------------------------------
-  pipe_mem_wb reg_mem_wb(
+  // ALUResultM, WriteDataM and MemWriteM go directly to external data memory (dmem).
+  // ReadDataM is received from external data memory (dmem).
+
+  // Pipeline Register MEM / WB 
+
+  // Control signals
+  flopr #(1) regwrite_w_reg(
     .clk(clk),
     .reset(reset),
-    .clear(1'b0),
-    .en(1'b1),
-    // Control in
-    .RegWriteM(RegWriteM),
-    .ResultSrcM(ResultSrcM),
-    // Data in
-    .ALUResultM(ALUResultM),
-    .ReadDataM(ReadDataM),
-    .RdM(RdM),
-    .PCPlus4M(PCPlus4M),
-    // Control out
-    .RegWriteW(RegWriteW),
-    .ResultSrcW(ResultSrcW),
-    // Data out
-    .ALUResultW(ALUResultW),
-    .ReadDataW(ReadDataW),
-    .RdW(RdW),
-    .PCPlus4W(PCPlus4W)
+    .d(RegWriteM),
+    .q(RegWriteW)
   );
 
-  // -------------------------------------------------------
+  flopr #(2) resultsrc_w_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ResultSrcM),
+    .q(ResultSrcW)
+  );
+
+  // Data signals
+  flopr #(32) aluresult_w_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ALUResultM),
+    .q(ALUResultW)
+  );
+
+  flopr #(32) readdata_w_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(ReadDataM),
+    .q(ReadDataW)
+  );
+
+  flopr #(5) rdw_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(RdM),
+    .q(RdW)
+  );
+
+  flopr #(32) pcplus4w_reg(
+    .clk(clk),
+    .reset(reset),
+    .d(PCPlus4M),
+    .q(PCPlus4W)
+  );
+
   // 5. Writeback Stage (WB)
-  // -------------------------------------------------------
+
   mux3 #(WIDTH) resultmux(
     .d0(ALUResultW),
     .d1(ReadDataW),

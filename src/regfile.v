@@ -6,8 +6,8 @@ module regfile(input  clk,
 
   reg [31:0] rf[31:0]; 
 
-  // write third port on rising edge of clock (A3/WD3/WE3)
-  always @(posedge clk) begin 
+  // write third port on falling edge of clock (A3/WD3/WE3)
+  always @(negedge clk) begin 
     if (we3) rf[a3] <= wd3; 
   end
   

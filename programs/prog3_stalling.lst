@@ -1,0 +1,30 @@
+0000: 04000a13   addi x20, x0, 64       # base de memoria
+0004: 00000613   addi x12, x0, 0        # x12 = 0 (debe seguir en 0 al final)
+0008: 01900093   addi x1, x0, 25        # x1 = 25
+000c: ff900113   addi x2, x0, -7        # x2 = -7
+0010: 001a2023   sw   x1, 0(x20)        # M[64] = 25
+0014: 002a2223   sw   x2, 4(x20)        # M[68] = -7
+0018: 000a2183   lw   x3, 0(x20)        # x3 = 25
+001c: 00118233   add  x4, x3, x1        # LOAD-USE en rs1 -> 1 stall            -> 50
+0020: 004a2283   lw   x5, 4(x20)        # x5 = -7
+0024: 40508333   sub  x6, x1, x5        # LOAD-USE en rs2 -> 1 stall            -> 32
+0028: 000a2383   lw   x7, 0(x20)        # x7 = 25
+002c: 007a2423   sw   x7, 8(x20)        # LOAD-USE en el dato del sw -> stall   -> M[72] = 25
+0030: 004a2403   lw   x8, 4(x20)        # x8 = -7
+0034: 00000013   nop
+0038: 008404b3   add  x9, x8, x8        # distancia 2: SIN stall, forwarding WB -> -14
+003c: 000a2003   lw   x0, 0(x20)        # carga a x0 (se descarta)
+0040: 00100533   add  x10, x0, x1       # SIN stall: x0 no genera dependencia  -> 25
+0044: 000a2583   lw   x11, 0(x20)       # x11 = 25
+0048: 00158463   beq  x11, x1, eq       # LOAD-USE en un beq -> stall y TOMADO
+004c: fff00613   addi x12, x0, -1       # anulada por el salto (x12 queda en 0)
+0050: 004a2683   eq:     lw   x13, 4(x20)       # x13 = -7
+0054: 000a2703   lw   x14, 0(x20)       # x14 = 25
+0058: 00e687b3   add  x15, x13, x14     # stall por x14 (x13 ya esta en el RF) -> 18
+005c: 004a2623   sw   x4, 12(x20)       # M[76]  = 50
+0060: 006a2823   sw   x6, 16(x20)       # M[80]  = 32
+0064: 009a2a23   sw   x9, 20(x20)       # M[84]  = -14
+0068: 00aa2c23   sw   x10, 24(x20)      # M[88]  = 25
+006c: 00ca2e23   sw   x12, 28(x20)      # M[92]  = 0
+0070: 02fa2023   sw   x15, 32(x20)      # M[96]  = 18
+0074: 00000063   done:   beq  x0, x0, done

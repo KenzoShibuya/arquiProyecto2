@@ -1,13 +1,5 @@
-# =====================================================================
 # Programa 1 - ISA sin dependencias
-# Objetivo: ejecutar todas las instrucciones RV32I soportadas
-#   (add, sub, and, or, slt, addi, andi, ori, slti, lw, sw, beq no tomado)
-#   sin que la Hazard Unit tenga que intervenir: todo consumidor esta
-#   al menos 3 instrucciones despues de su productor (el Register File
-#   escribe en el flanco de bajada y se lee en la segunda mitad del ciclo).
-# Esperado: ForwardAE = ForwardBE = 00, StallF/StallD = 0 y FlushD/FlushE = 0
-#   en todo el programa, salvo el bucle final "done", que es un salto tomado.
-# =====================================================================
+
         addi x1, x0, 12        # x1 = 12
         addi x2, x0, 5         # x2 = 5
         addi x3, x0, -3        # x3 = -3

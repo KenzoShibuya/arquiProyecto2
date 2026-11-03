@@ -1,9 +1,5 @@
-# =====================================================================
 # Programa 3 - Stalling (Load-Use)
-# Objetivo: dependencias que el forwarding NO puede resolver porque el dato
-#   de un lw recien existe al final de MEM. La Hazard Unit congela F y D
-#   (StallF = StallD = 1) e inserta una burbuja en E (FlushE = 1).
-# =====================================================================
+
         addi x20, x0, 64       # base de memoria
         addi x12, x0, 0        # x12 = 0 (debe seguir en 0 al final)
         addi x1, x0, 25        # x1 = 25

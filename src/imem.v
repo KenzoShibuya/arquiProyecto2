@@ -1,6 +1,6 @@
 // Memoria de instrucciones de DOBLE LECTURA (Dual Fetch)
-//   rd0 = instruccion en PC      (via 1, la mas antigua)
-//   rd1 = instruccion en PC + 4  (via 2, la mas nuevecita)
+//   rd0 = instruccion en PC
+//   rd1 = instruccion en PC + 4
 module imem #(
     parameter MEM_FILE = "riscvtest.mem",
     parameter DEPTH    = 256            // palabras de 32 bits

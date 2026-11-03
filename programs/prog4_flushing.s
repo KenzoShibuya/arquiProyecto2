@@ -1,11 +1,5 @@
-# =====================================================================
 # Programa 4 - Flushing (control hazards)
-# Objetivo: cuando un beq/jal se resuelve tomado en EX (PCSrcE = 1), las
-#   2 instrucciones mas jovenes ya buscadas (en F y D) se anulan:
-#   FlushD = FlushE = 1. Un beq NO tomado no anula nada.
-#   Incluye: beq tomado hacia adelante, beq no tomado, jal hacia adelante
-#   (con registro de enlace) y un bucle con jal hacia atras.
-# =====================================================================
+
         addi x20, x0, 64       # base de memoria
         addi x1, x0, 4
         addi x2, x0, 4

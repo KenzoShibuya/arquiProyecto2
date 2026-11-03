@@ -1,5 +1,5 @@
 module top #(
-    parameter MEM_FILE = "riscvtest.mem"   // programa a cargar en la memoria de instrucciones
+    parameter MEM_FILE = "riscvtest.mem"
 )(
     input         clk, reset,
     output [31:0] WriteData, DataAdr,

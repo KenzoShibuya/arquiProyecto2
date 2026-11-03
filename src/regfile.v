@@ -1,7 +1,5 @@
 // Banco de registros de 4 lecturas y 2 escrituras
-//   Lecturas: a1/a2 -> via 1,  a3/a4 -> via 2 (combinacionales)
-//   Escrituras (negedge): puerto 0 -> via 1, puerto 1 -> via 2
-//   Si ambas vias escriben el mismo registro, gana la via 2 (instruccion mas nueva).
+
 module regfile(
     input         clk,
     input  [4:0]  a1, a2, a3, a4,

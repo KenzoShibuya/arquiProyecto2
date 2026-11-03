@@ -1,10 +1,5 @@
-# =====================================================================
 # Programa 2 - Forwarding
-# Objetivo: dependencias RAW resueltas SIN stalls, solo con forwarding:
-#   MEM->EX y WB->EX, en el operando A (rs1) y en el B (rs2),
-#   prioridad MEM sobre WB, no forwarding de x0,
-#   forwarding al dato de un sw (WriteDataE) y a los operandos de un beq.
-# =====================================================================
+
         addi x20, x0, 64       # base de memoria
         addi x15, x0, 0        # x15 = 0 (debe seguir en 0 al final)
         addi x1, x0, 10        # x1 = 10

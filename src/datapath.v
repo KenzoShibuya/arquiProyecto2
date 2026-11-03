@@ -95,6 +95,7 @@ module datapath(
 
   // Avance secuencial: +4 (unica emitida) o +8 (par emitido)
   mux2 #(32) pcseqmux (.d0(PCPlus4F), .d1(PCPlus8F), .s(PCInc8F), .y(PCSeqF));
+  
   // Redireccion por salto tomado (resuelto en EX de la via 1)
   mux2 #(32) pcmux    (.d0(PCSeqF), .d1(PCTargetE), .s(PCSrcE), .y(PCNextF));
 
@@ -206,7 +207,6 @@ module datapath(
   flopr #(32) pcplus4m2_reg    (.clk(clk), .reset(reset), .d(PCPlus4E2),   .q(PCPlus4M2));
 
   // MEMORY 
-  // Un solo puerto de memoria de datos: lo usa la via 1 (en E2 se asignara dinamicamente a la via que lleve el Load/Store)
 
   // Registro MEM/WB via 1
   flopr #(1)  regwrite_w_reg  (.clk(clk), .reset(reset), .d(RegWriteM),  .q(RegWriteW));

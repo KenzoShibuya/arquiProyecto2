@@ -1,0 +1,31 @@
+0000: 04000a13   addi x20, x0, 64       # base de memoria
+0004: 00100093   addi x1, x0, 1         # x1 = 1
+0008: 00000493   addi x9, x0, 0         # contador = 0
+000c: 00000113   addi x2, x0, 0         # x2 = 0
+0010: 001080b3   add  x1, x1, x1        # x1 = 2     cadena: RAW con la siguiente
+0014: 00108093   addi x1, x1, 1         # x1 = 3
+0018: 001080b3   add  x1, x1, x1        # x1 = 6
+001c: 00108093   addi x1, x1, 1         # x1 = 7
+0020: 00148493   addi x9, x9, 1         # contador = 1 (independiente de x1)
+0024: 001080b3   add  x1, x1, x1        # x1 = 14
+0028: 00108093   addi x1, x1, 1         # x1 = 15
+002c: 00510113   addi x2, x2, 5         # x2 = 5   (independiente)
+0030: 001080b3   add  x1, x1, x1        # x1 = 30
+0034: 00148493   addi x9, x9, 1         # contador = 2
+0038: 00148493   addi x9, x9, 1         # contador = 3  (RAW con la anterior)
+003c: 00308093   addi x1, x1, 3         # x1 = 33
+0040: 00100513   addi x10, x0, 1        # par DUAL: dos escrituras al MISMO registro
+0044: 00200513   addi x10, x0, 2        #   en el mismo ciclo -> x10 = 2
+0048: 001080b3   add  x1, x1, x1        # x1 = 66
+004c: 00148493   addi x9, x9, 1         # contador = 4
+0050: 00a080b3   add  x1, x1, x10       # x1 = 68   (x10 = 2: prioridad de la via 2)
+0054: 00710113   addi x2, x2, 7         # x2 = 12
+0058: 001080b3   add  x1, x1, x1        # x1 = 136
+005c: 00148493   addi x9, x9, 1         # contador = 5
+0060: fff08093   addi x1, x1, -1        # x1 = 135
+0064: 00148493   addi x9, x9, 1         # contador = 6
+0068: 001a2023   sw   x1, 0(x20)        # M[64] = 135
+006c: 009a2223   sw   x9, 4(x20)        # M[68] = 6
+0070: 002a2423   sw   x2, 8(x20)        # M[72] = 12
+0074: 00aa2623   sw   x10, 12(x20)      # M[76] = 2
+0078: 00000063   done:   beq  x0, x0, done

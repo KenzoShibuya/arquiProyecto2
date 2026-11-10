@@ -29,27 +29,30 @@ module issue_unit(
   wire [4:0] Rs2D2 = InstrD2[24:20];
 
   // Identificacion de si la via 2 realmente lee Rs1D2 / Rs2D2
-  // (evita falsos conflictos con bits de inmediato en I-type, lw o jal)
+
   wire UsesRs1D2 = ~JumpD2 & (opD2 != 7'b0000000);
   wire UsesRs2D2 = (opD2 == 7'b0110011) | MemWriteD2 | BranchD2;
 
   // 1. Dependencia RAW intra-par: la via 1 escribe un registro que la via 2 lee
+  
   wire raw_hazard = RegWriteD & (RdD != 5'b0) &
                     ((UsesRs1D2 & (Rs1D2 == RdD)) |
                      (UsesRs2D2 & (Rs2D2 == RdD)));
 
   // 2. Conflicto estructural del unico puerto de memoria de datos (lw / sw)
+
   wire IsMemD       = MemWriteD  | ResultSrcD[0];
   wire IsMemD2      = MemWriteD2 | ResultSrcD2[0];
   wire mem_conflict = IsMemD & IsMemD2;
 
   // 3. Conflicto estructural del unico recurso de saltos (beq / jal)
-  //    Si la via 1 es jal (salto incondicional), tampoco se emite la via 2
+
   wire IsCtrlD       = BranchD  | JumpD;
   wire IsCtrlD2      = BranchD2 | JumpD2;
   wire ctrl_conflict = (IsCtrlD & IsCtrlD2) | JumpD;
 
   // 4. Hazard Load-Use de la via 2 con un lw previo en EX (via 1 o via 2)
+
   wire lw_e1_slot2 = ResultSrcEb0  & (RdE  != 5'b0) &
                      ((UsesRs1D2 & (Rs1D2 == RdE))  | (UsesRs2D2 & (Rs2D2 == RdE)));
   wire lw_e2_slot2 = ResultSrcE2b0 & (RdE2 != 5'b0) &

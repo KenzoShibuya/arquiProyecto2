@@ -105,9 +105,9 @@ module datapath(
   wire [1:0]  ResultSrcW2;
   wire [31:0] ALUResultW2, PCPlus4W2, ResultW2;
 
-  // ===========================================================================
+
   // FETCH & REAGRUPAMIENTO (IF -> ID)
-  // ===========================================================================
+
   adder pcadd4 (.a(PCF), .b(32'd4), .y(PCPlus4F));   // PC + 4
   adder pcadd8 (.a(PCF), .b(32'd8), .y(PCPlus8F));   // PC + 8
 
@@ -120,9 +120,8 @@ module datapath(
   flopenr #(32) pcreg (.clk(clk), .reset(reset), .en(~StallF), .d(PCNextF), .q(PCF));
 
   // Conservacion y reagrupamiento cuando IssueSlot2D == 0:
-  //   - Si IssueSlot2D == 1: entran (InstrF, InstrF2) desde IF
-  //   - Si IssueSlot2D == 0: la via 2 no emitida (InstrD2) pasa a la via 1 (InstrD),
-  //                          y se reagrupa con InstrF que entra en la via 2 (InstrD2)
+  // IssueSlot2D == 1: entran (InstrF, InstrF2) desde IF
+  // IssueSlot2D == 0: la via 2 no emitida (InstrD2) pasa a la via 1 (InstrD), y se reagrupa con InstrF que entra en la via 2 (InstrD2)
   mux2 #(32) next_instrd_mux   (.d0(InstrD2),   .d1(InstrF),   .s(IssueSlot2D), .y(NextInstrD));
   mux2 #(32) next_pcd_mux      (.d0(PCD2),      .d1(PCF),      .s(IssueSlot2D), .y(NextPCD));
   mux2 #(32) next_pcplus4d_mux (.d0(PCPlus4D2), .d1(PCPlus4F), .s(IssueSlot2D), .y(NextPCPlus4D));
@@ -132,6 +131,7 @@ module datapath(
   mux2 #(32) next_pcplus4d2_mux (.d0(PCPlus4F), .d1(PCPlus8F), .s(IssueSlot2D), .y(NextPCPlus4D2));
 
   // Registro IF/ID (par de instrucciones)
+
   // via 1
   flopenrc #(32) instrd_reg   (.clk(clk), .reset(reset), .clear(FlushD), .en(~StallD), .d(NextInstrD),   .q(InstrD));
   flopenrc #(32) pcd_reg      (.clk(clk), .reset(reset), .clear(FlushD), .en(~StallD), .d(NextPCD),      .q(PCD));
@@ -141,9 +141,9 @@ module datapath(
   flopenrc #(32) pcd2_reg      (.clk(clk), .reset(reset), .clear(FlushD), .en(~StallD), .d(NextPCD2),      .q(PCD2));
   flopenrc #(32) pcplus4d2_reg (.clk(clk), .reset(reset), .clear(FlushD), .en(~StallD), .d(NextPCPlus4D2), .q(PCPlus4D2));
 
-  // ===========================================================================
+
   // DECODE (ID)
-  // ===========================================================================
+
   assign Rs1D  = InstrD[19:15];
   assign Rs2D  = InstrD[24:20];
   assign RdD   = InstrD[11:7];
@@ -168,6 +168,7 @@ module datapath(
   extend ext2 (.instr(InstrD2[31:7]), .immsrc(ImmSrcD2), .immext(ImmExtD2));
 
   // La via 2 solo pasa a EX si la Issue Unit la emite; si no, entra una burbuja limpia
+
   assign RegWriteI2  = RegWriteD2 & IssueSlot2D;
   assign MemWriteI2  = MemWriteD2 & IssueSlot2D;
   assign JumpI2      = JumpD2     & IssueSlot2D;
@@ -209,9 +210,8 @@ module datapath(
   floprc #(32) imm_e2_reg        (.clk(clk), .reset(reset), .clear(FlushE), .d(ImmExtD2),     .q(ImmExtE2));
   floprc #(32) pcplus4e2_reg     (.clk(clk), .reset(reset), .clear(FlushE), .d(PCPlus4D2),    .q(PCPlus4E2));
 
-  // ===========================================================================
   // EXECUTE (EX) - Dos ALU + Cross-Forwarding + Recurso compartido de Saltos
-  // ===========================================================================
+
   // Datos adelantables desde MEM (incluye soporte para jal que escribe PC+4)
   assign ForwardDataM1 = (ResultSrcM  == 2'b10) ? PCPlus4M  : ALUResultM;
   assign ForwardDataM2 = (ResultSrcM2 == 2'b10) ? PCPlus4M2 : ALUResultM2;
@@ -271,9 +271,9 @@ module datapath(
   floprc #(5)  rdm2_reg         (.clk(clk), .reset(reset), .clear(FlushM2), .d(RdE2),        .q(RdM2));
   floprc #(32) pcplus4m2_reg    (.clk(clk), .reset(reset), .clear(FlushM2), .d(PCPlus4E2),   .q(PCPlus4M2));
 
-  // ===========================================================================
+
   // MEMORY (MEM) - Asignacion del unico puerto de memoria de datos (dmem)
-  // ===========================================================================
+
   assign MemAccessM2     = MemWriteM2 | ResultSrcM2[0];
   assign MemWriteM_port  = MemWriteM  | MemWriteM2;
   assign DataAdrM_port   = MemAccessM2 ? ALUResultM2 : ALUResultM;
@@ -294,9 +294,9 @@ module datapath(
   flopr #(5)  rdw2_reg         (.clk(clk), .reset(reset), .d(RdM2),        .q(RdW2));
   flopr #(32) pcplus4w2_reg    (.clk(clk), .reset(reset), .d(PCPlus4M2),   .q(PCPlus4W2));
 
-  // ===========================================================================
+
   // WRITEBACK (WB)
-  // ===========================================================================
+
   mux3 #(32) resultmux  (.d0(ALUResultW),  .d1(ReadDataW), .d2(PCPlus4W),  .s(ResultSrcW),  .y(ResultW));
   mux3 #(32) resultmux2 (.d0(ALUResultW2), .d1(ReadDataW), .d2(PCPlus4W2), .s(ResultSrcW2), .y(ResultW2));
 

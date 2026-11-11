@@ -1,5 +1,7 @@
 module top #(
-    parameter MEM_FILE = "riscvtest.mem"
+    parameter MEM_FILE      = "riscvtest.mem",
+    parameter ENABLE_DCACHE = 1,
+    parameter SINGLE_ISSUE  = 0
 )(
     input         clk, reset,
     output [31:0] WriteData, DataAdr,
@@ -8,7 +10,10 @@ module top #(
 
   wire [31:0] PC, Instr, Instr2, ReadData;
 
-  riscvpipe rvpipe (
+  riscvpipe #(
+    .ENABLE_DCACHE(ENABLE_DCACHE),
+    .SINGLE_ISSUE(SINGLE_ISSUE)
+  ) rvpipe (
     .clk(clk), .reset(reset),
     .PC(PC), .Instr(Instr), .Instr2(Instr2),
     .MemWrite(MemWrite), .DataAdr(DataAdr),

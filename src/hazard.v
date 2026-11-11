@@ -20,6 +20,7 @@ module hazard(
     input            RegWriteM,
     input      [4:0] RdM2,
     input            RegWriteM2,
+    input            MemStall,
     // Writeback (W) - via 1 y via 2
     input      [4:0] RdW,
     input            RegWriteW,
@@ -95,13 +96,13 @@ module hazard(
   assign lwStall = (lw_in_E1 & ((UsesRs1D & (Rs1D == RdE))  | (UsesRs2D & (Rs2D == RdE)))) |
                    (lw_in_E2 & ((UsesRs1D & (Rs1D == RdE2)) | (UsesRs2D & (Rs2D == RdE2))));
 
-  // Un salto tomado en EX (PCSrcE) tiene prioridad sobre el stall para permitir redirigir PC y limpiar IF/ID
-  assign StallF  = lwStall & ~PCSrcE;
-  assign StallD  = lwStall & ~PCSrcE;
+  // Un salto tomado en EX (PCSrcE) tiene prioridad sobre lwStall; MemStall congela todo el pipeline
+  assign StallF  = (lwStall & ~PCSrcE) | MemStall;
+  assign StallD  = (lwStall & ~PCSrcE) | MemStall;
 
-  // Flush de etapas mas jovenes
-  assign FlushD  = PCSrcE;
-  assign FlushE  = lwStall | PCSrcE;
-  assign FlushM2 = PCSrcE1; // Si salta la via 1, se anula la instruccion mas joven en EX2
+  // Flush de etapas mas jovenes (inhibido mientras el pipeline esta congelado por MemStall)
+  assign FlushD  = PCSrcE & ~MemStall;
+  assign FlushE  = (lwStall | PCSrcE) & ~MemStall;
+  assign FlushM2 = PCSrcE1 & ~MemStall; // Si salta la via 1, se anula la instruccion mas joven en EX2
 
 endmodule

@@ -1,4 +1,7 @@
-module issue_unit(
+module issue_unit #(
+    parameter ENABLE_DCACHE = 1,
+    parameter SINGLE_ISSUE  = 0
+)(
     input  [31:0] InstrD,        // via 1 (mas antigua)
     input  [31:0] InstrD2,       // via 2 (mas joven)
     // Senales de control via 1 (Decode)
@@ -39,11 +42,13 @@ module issue_unit(
                     ((UsesRs1D2 & (Rs1D2 == RdD)) |
                      (UsesRs2D2 & (Rs2D2 == RdD)));
 
-  // 2. Conflicto estructural del unico puerto de memoria de datos (lw / sw)
+  // 2. Conflicto estructural del puerto de memoria de datos (lw / sw)
+  // Con dcache L1 de doble acceso (ENABLE_DCACHE=1), lw+lw, lw+sw y sw+lw se emiten juntos;
+  // solo se bloquea en ID cuando ambas instrucciones son escrituras (sw+sw).
 
   wire IsMemD       = MemWriteD  | ResultSrcD[0];
   wire IsMemD2      = MemWriteD2 | ResultSrcD2[0];
-  wire mem_conflict = IsMemD & IsMemD2;
+  wire mem_conflict = ENABLE_DCACHE ? (MemWriteD & MemWriteD2) : (IsMemD & IsMemD2);
 
   // 3. Conflicto estructural del unico recurso de saltos (beq / jal)
 
@@ -59,8 +64,8 @@ module issue_unit(
                      ((UsesRs1D2 & (Rs1D2 == RdE2)) | (UsesRs2D2 & (Rs2D2 == RdE2)));
   wire lw_hazard_slot2 = lw_e1_slot2 | lw_e2_slot2;
 
-  // Se emite el par completo si no existe ninguna restriccion
-  assign IssueSlot2D = ~(raw_hazard | mem_conflict | ctrl_conflict | lw_hazard_slot2);
+  // Se emite el par completo si no existe ninguna restriccion (y no esta forzado a Single-Issue)
+  assign IssueSlot2D = SINGLE_ISSUE ? 1'b0 : ~(raw_hazard | mem_conflict | ctrl_conflict | lw_hazard_slot2);
   assign PCInc8F     = IssueSlot2D;
 
 endmodule

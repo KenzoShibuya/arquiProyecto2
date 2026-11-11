@@ -97,6 +97,18 @@ module tb_e2_core #(
     wire FlushD = dut.rvpipe.FlushD;
     wire FlushE = dut.rvpipe.FlushE;
     wire FlushM2 = dut.rvpipe.FlushM2;
+    wire MemStall = dut.rvpipe.MemStall;
+
+    // Senales de Cache L1 (EF)
+    wire hit1 = dut.rvpipe.dc.hit1;
+    wire hit2 = dut.rvpipe.dc.hit2;
+    wire st_to_ld_bypass = dut.rvpipe.dc.st_to_ld_bypass;
+    wire [31:0] ReadDataM_cache = dut.rvpipe.ReadDataM_cache;
+    wire [31:0] ReadDataM2_cache = dut.rvpipe.ReadDataM2_cache;
+    wire [31:0] cache_accesses = dut.rvpipe.dc.cache_accesses;
+    wire [31:0] cache_hits = dut.rvpipe.dc.cache_hits;
+    wire [31:0] cache_misses = dut.rvpipe.dc.cache_misses;
+    wire [31:0] dual_mem_pairs = dut.rvpipe.dc.dual_mem_pairs;
 
     wire IssueSlot2D = dut.rvpipe.IssueSlot2D;
     wire PCInc8F = dut.rvpipe.PCInc8F;
@@ -182,7 +194,7 @@ module tb_e2_core #(
             validM2 <= 0;
             validW <= 0;
             validW2 <= 0;
-        end else begin
+        end else if (!MemStall) begin
             InstrE <= FlushE ? 32'b0 : InstrD;
             InstrE2 <= (FlushE || !IssueSlot2D) ? 32'b0 : InstrD2;
 
@@ -597,6 +609,32 @@ module tb_e2_core #(
                     check_event(duplicados == 0 &&
                                 perdidos == 0);
                 end
+
+                10: begin
+                    if (dut.dmem.RAM[16] !== 32'd16)  errores = errores + 1;
+                    if (dut.dmem.RAM[17] !== 32'd32)  errores = errores + 1;
+                    if (dut.dmem.RAM[18] !== 32'd48)  errores = errores + 1;
+                    if (dut.dmem.RAM[19] !== 32'd64)  errores = errores + 1;
+                    check_mem(80,2);
+                    check_mem(84,4);
+                    check_mem(88,6);
+                    check_mem(92,8);
+                    check_mem(96,160);
+                    check_mem(100,50);
+                    check_mem(104,192);
+                    check_mem(108,98);
+                    check_mem(112,100);
+
+                    check_reg(11,160);
+                    check_reg(13,160);
+                    check_reg(14,32);
+                    check_reg(15,48);
+                    check_reg(21,192);
+                    check_reg(22,98);
+                    check_reg(23,100);
+
+                    check_event(cache_hits > 0 && dual_mem_pairs > 0);
+                end
             endcase
 
             if (escrituras_inesperadas > 0)
@@ -627,6 +665,10 @@ module tb_e2_core #(
                         9: if (j > 19 &&
                                escrituras_pc[j] != 0)
                                errores = errores + 1;
+
+                        10: if (j > 28 &&
+                                escrituras_pc[j] != 0)
+                                errores = errores + 1;
                     endcase
                 end
             end
@@ -683,5 +725,15 @@ module tb_prog9;
         .DONE_PC(32'h00000078),
         .FIRST0(32'h04000a13),
         .FIRST1(32'h00100093)
+    ) u();
+endmodule
+
+module tb_prog10;
+    tb_e2_core #(
+        .PROG(10),
+        .MEM_FILE("prog10_cache_eval.mem"),
+        .DONE_PC(32'h000000e8),
+        .FIRST0(32'h04000a13),
+        .FIRST1(32'h00300913)
     ) u();
 endmodule

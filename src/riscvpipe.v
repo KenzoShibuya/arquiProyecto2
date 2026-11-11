@@ -1,4 +1,7 @@
-module riscvpipe(
+module riscvpipe #(
+    parameter ENABLE_DCACHE = 1,
+    parameter SINGLE_ISSUE  = 0
+)(
     input         clk,
     input         reset,
     output [31:0] PC,
@@ -28,10 +31,19 @@ module riscvpipe(
   wire       PCSrcE, PCSrcE1, ResultSrcEb0, ResultSrcE2b0;
   wire       RegWriteM, RegWriteM2, RegWriteW, RegWriteW2;
   wire [2:0] ForwardAE, ForwardBE, ForwardAE2, ForwardBE2;
-  wire       StallF, StallD, FlushD, FlushE, FlushM2;
+  wire       StallF, StallD, FlushD, FlushE, FlushM2, MemStall;
 
   // Issue Unit
   wire       IssueSlot2D, PCInc8F;
+
+  // Señales entre Datapath (MEM) y D-Cache (L1)
+  wire        MemReadM, MemWriteM, MemReadM2, MemWriteM2;
+  wire [31:0] ALUResultM, WriteDataM, ALUResultM2, WriteDataM2;
+  wire [31:0] ReadDataM_cache, ReadDataM2_cache;
+  wire        MemWriteM_port_unused;
+  wire [31:0] DataAdrM_port_unused, WriteDataM_port_unused;
+  wire        hit1_out, hit2_out;
+  wire [31:0] cache_accesses, cache_hits, cache_misses, dual_mem_pairs;
 
   // Dual Decode: un controlador por via
   controller c (
@@ -48,7 +60,10 @@ module riscvpipe(
     .ImmSrc(ImmSrcD2), .ALUControl(ALUControlD2)
   );
 
-  issue_unit iu (
+  issue_unit #(
+    .ENABLE_DCACHE(ENABLE_DCACHE),
+    .SINGLE_ISSUE(SINGLE_ISSUE)
+  ) iu (
     .InstrD(InstrD), .InstrD2(InstrD2),
     .RegWriteD(RegWriteD), .MemWriteD(MemWriteD), .ResultSrcD(ResultSrcD),
     .BranchD(BranchD), .JumpD(JumpD),
@@ -69,13 +84,16 @@ module riscvpipe(
     .RdM2(RdM2), .RegWriteM2(RegWriteM2),
     .RdW(RdW), .RegWriteW(RegWriteW),
     .RdW2(RdW2), .RegWriteW2(RegWriteW2),
+    .MemStall(MemStall),
     .ForwardAE(ForwardAE), .ForwardBE(ForwardBE),
     .ForwardAE2(ForwardAE2), .ForwardBE2(ForwardBE2),
     .StallF(StallF), .StallD(StallD),
     .FlushD(FlushD), .FlushE(FlushE), .FlushM2(FlushM2)
   );
 
-  datapath dp (
+  datapath #(
+    .SINGLE_ISSUE(SINGLE_ISSUE)
+  ) dp (
     .clk(clk), .reset(reset),
     // control via 1
     .ResultSrcD(ResultSrcD), .ALUSrcD(ALUSrcD), .RegWriteD(RegWriteD),
@@ -92,6 +110,7 @@ module riscvpipe(
     .ForwardAE2(ForwardAE2), .ForwardBE2(ForwardBE2),
     .StallF(StallF), .StallD(StallD),
     .FlushD(FlushD), .FlushE(FlushE), .FlushM2(FlushM2),
+    .MemStall(MemStall),
     // salidas hacia control / hazard / issue
     .InstrD(InstrD), .InstrD2(InstrD2),
     .Rs1D(Rs1D), .Rs2D(Rs2D), .UsesRs1D(UsesRs1D), .UsesRs2D(UsesRs2D),
@@ -105,8 +124,37 @@ module riscvpipe(
     .RdW2(RdW2), .RegWriteW2(RegWriteW2),
     // memorias
     .PCF(PC), .InstrF(Instr), .InstrF2(Instr2),
-    .MemWriteM_port(MemWrite), .DataAdrM_port(DataAdr), .WriteDataM_port(WriteData),
-    .ReadDataM(ReadData)
+    .MemReadM(MemReadM), .MemWriteM(MemWriteM),
+    .ALUResultM(ALUResultM), .WriteDataM(WriteDataM),
+    .MemReadM2(MemReadM2), .MemWriteM2(MemWriteM2),
+    .ALUResultM2(ALUResultM2), .WriteDataM2(WriteDataM2),
+    .MemWriteM_port(MemWriteM_port_unused),
+    .DataAdrM_port(DataAdrM_port_unused),
+    .WriteDataM_port(WriteDataM_port_unused),
+    .ReadDataM(ReadDataM_cache),
+    .ReadDataM2(ReadDataM2_cache)
+  );
+
+  dcache #(
+    .ENABLE_DCACHE(ENABLE_DCACHE)
+  ) dc (
+    .clk(clk), .reset(reset),
+    .MemReadM(MemReadM), .MemWriteM(MemWriteM),
+    .AddrM(ALUResultM), .WriteDataM(WriteDataM),
+    .ReadDataM(ReadDataM_cache),
+    .MemReadM2(MemReadM2), .MemWriteM2(MemWriteM2),
+    .AddrM2(ALUResultM2), .WriteDataM2(WriteDataM2),
+    .ReadDataM2(ReadDataM2_cache),
+    .MemStall(MemStall),
+    .MemWrite_dmem(MemWrite),
+    .DataAdr_dmem(DataAdr),
+    .WriteData_dmem(WriteData),
+    .ReadData_dmem(ReadData),
+    .hit1_out(hit1_out), .hit2_out(hit2_out),
+    .cache_accesses(cache_accesses),
+    .cache_hits(cache_hits),
+    .cache_misses(cache_misses),
+    .dual_mem_pairs(dual_mem_pairs)
   );
 
 endmodule

@@ -1,4 +1,6 @@
-module datapath(
+module datapath #(
+    parameter SINGLE_ISSUE = 0
+)(
     input         clk, reset,
     // Control via 1
     input  [1:0]  ResultSrcD,
@@ -31,6 +33,7 @@ module datapath(
     input         FlushD,
     input         FlushE,
     input         FlushM2,
+    input         MemStall,
     // Hacia controladores / hazard / issue
     output [31:0] InstrD,
     output [31:0] InstrD2,
@@ -54,11 +57,20 @@ module datapath(
     output [31:0] PCF,
     input  [31:0] InstrF,
     input  [31:0] InstrF2,
-    // Memoria de datos (un solo puerto compartido)
+    // Etapa MEM hacia dcache (dos vias) y puerto compartido
+    output        MemReadM,
+    output        MemWriteM,
+    output [31:0] ALUResultM,
+    output [31:0] WriteDataM,
+    output        MemReadM2,
+    output        MemWriteM2,
+    output [31:0] ALUResultM2,
+    output [31:0] WriteDataM2,
     output        MemWriteM_port,
     output [31:0] DataAdrM_port,
     output [31:0] WriteDataM_port,
-    input  [31:0] ReadDataM
+    input  [31:0] ReadDataM,
+    input  [31:0] ReadDataM2
 );
 
   // IF
@@ -91,19 +103,18 @@ module datapath(
   wire        CtrlE2;
   wire [31:0] BranchBaseE, BranchImmE;
   // MEM via 1
-  wire        MemWriteM;
   wire [1:0]  ResultSrcM;
-  wire [31:0] ALUResultM, WriteDataM, PCPlus4M, ForwardDataM1;
+  wire [31:0] PCPlus4M, ForwardDataM1;
   // MEM via 2
-  wire        MemWriteM2, MemAccessM2;
+  wire        MemAccessM2;
   wire [1:0]  ResultSrcM2;
-  wire [31:0] ALUResultM2, WriteDataM2, PCPlus4M2, ForwardDataM2;
+  wire [31:0] PCPlus4M2, ForwardDataM2;
   // WB via 1
   wire [1:0]  ResultSrcW;
   wire [31:0] ALUResultW, ReadDataW, PCPlus4W, ResultW;
   // WB via 2
   wire [1:0]  ResultSrcW2;
-  wire [31:0] ALUResultW2, PCPlus4W2, ResultW2;
+  wire [31:0] ALUResultW2, ReadDataW2, PCPlus4W2, ResultW2;
 
 
   // FETCH & REAGRUPAMIENTO (IF -> ID)
@@ -119,16 +130,19 @@ module datapath(
 
   flopenr #(32) pcreg (.clk(clk), .reset(reset), .en(~StallF), .d(PCNextF), .q(PCF));
 
-  // Conservacion y reagrupamiento cuando IssueSlot2D == 0:
+  // Conservacion y reagrupamiento cuando IssueSlot2D == 0 (en modo Dual-Issue):
   // IssueSlot2D == 1: entran (InstrF, InstrF2) desde IF
   // IssueSlot2D == 0: la via 2 no emitida (InstrD2) pasa a la via 1 (InstrD), y se reagrupa con InstrF que entra en la via 2 (InstrD2)
-  mux2 #(32) next_instrd_mux   (.d0(InstrD2),   .d1(InstrF),   .s(IssueSlot2D), .y(NextInstrD));
-  mux2 #(32) next_pcd_mux      (.d0(PCD2),      .d1(PCF),      .s(IssueSlot2D), .y(NextPCD));
-  mux2 #(32) next_pcplus4d_mux (.d0(PCPlus4D2), .d1(PCPlus4F), .s(IssueSlot2D), .y(NextPCPlus4D));
+  // En modo SINGLE_ISSUE == 1: IF alimenta directamente la via 1 (InstrF -> InstrD) y la via 2 permanece en NOP.
+  wire        use_direct_if  = IssueSlot2D | (SINGLE_ISSUE != 0);
+  wire [31:0] InstrF2_masked = (SINGLE_ISSUE != 0) ? 32'b0 : InstrF2;
+  mux2 #(32) next_instrd_mux   (.d0(InstrD2),   .d1(InstrF),   .s(use_direct_if), .y(NextInstrD));
+  mux2 #(32) next_pcd_mux      (.d0(PCD2),      .d1(PCF),      .s(use_direct_if), .y(NextPCD));
+  mux2 #(32) next_pcplus4d_mux (.d0(PCPlus4D2), .d1(PCPlus4F), .s(use_direct_if), .y(NextPCPlus4D));
 
-  mux2 #(32) next_instrd2_mux   (.d0(InstrF),   .d1(InstrF2),  .s(IssueSlot2D), .y(NextInstrD2));
-  mux2 #(32) next_pcd2_mux      (.d0(PCF),      .d1(PCPlus4F), .s(IssueSlot2D), .y(NextPCD2));
-  mux2 #(32) next_pcplus4d2_mux (.d0(PCPlus4F), .d1(PCPlus8F), .s(IssueSlot2D), .y(NextPCPlus4D2));
+  mux2 #(32) next_instrd2_mux   (.d0(InstrF),   .d1(InstrF2_masked), .s(use_direct_if), .y(NextInstrD2));
+  mux2 #(32) next_pcd2_mux      (.d0(PCF),      .d1(PCPlus4F),       .s(use_direct_if), .y(NextPCD2));
+  mux2 #(32) next_pcplus4d2_mux (.d0(PCPlus4F), .d1(PCPlus8F),       .s(use_direct_if), .y(NextPCPlus4D2));
 
   // Registro IF/ID (par de instrucciones)
 
@@ -177,38 +191,38 @@ module datapath(
   assign RdI2        = IssueSlot2D ? RdD2        : 5'b0;
 
   // Registro ID/EX via 1
-  floprc #(1)  regwrite_e_reg   (.clk(clk), .reset(reset), .clear(FlushE), .d(RegWriteD),   .q(RegWriteE));
-  floprc #(2)  resultsrc_e_reg  (.clk(clk), .reset(reset), .clear(FlushE), .d(ResultSrcD),  .q(ResultSrcE));
-  floprc #(1)  memwrite_e_reg   (.clk(clk), .reset(reset), .clear(FlushE), .d(MemWriteD),   .q(MemWriteE));
-  floprc #(1)  jump_e_reg       (.clk(clk), .reset(reset), .clear(FlushE), .d(JumpD),       .q(JumpE));
-  floprc #(1)  branch_e_reg     (.clk(clk), .reset(reset), .clear(FlushE), .d(BranchD),     .q(BranchE));
-  floprc #(3)  alucontrol_e_reg (.clk(clk), .reset(reset), .clear(FlushE), .d(ALUControlD), .q(ALUControlE));
-  floprc #(1)  alusrc_e_reg     (.clk(clk), .reset(reset), .clear(FlushE), .d(ALUSrcD),     .q(ALUSrcE));
-  floprc #(32) rd1_e_reg        (.clk(clk), .reset(reset), .clear(FlushE), .d(RD1D),        .q(RD1E));
-  floprc #(32) rd2_e_reg        (.clk(clk), .reset(reset), .clear(FlushE), .d(RD2D),        .q(RD2E));
-  floprc #(32) pce_reg          (.clk(clk), .reset(reset), .clear(FlushE), .d(PCD),         .q(PCE));
-  floprc #(5)  rs1e_reg         (.clk(clk), .reset(reset), .clear(FlushE), .d(Rs1D),        .q(Rs1E));
-  floprc #(5)  rs2e_reg         (.clk(clk), .reset(reset), .clear(FlushE), .d(Rs2D),        .q(Rs2E));
-  floprc #(5)  rde_reg          (.clk(clk), .reset(reset), .clear(FlushE), .d(RdD),         .q(RdE));
-  floprc #(32) imm_e_reg        (.clk(clk), .reset(reset), .clear(FlushE), .d(ImmExtD),     .q(ImmExtE));
-  floprc #(32) pcplus4e_reg     (.clk(clk), .reset(reset), .clear(FlushE), .d(PCPlus4D),    .q(PCPlus4E));
+  flopenrc #(1)  regwrite_e_reg   (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(RegWriteD),   .q(RegWriteE));
+  flopenrc #(2)  resultsrc_e_reg  (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(ResultSrcD),  .q(ResultSrcE));
+  flopenrc #(1)  memwrite_e_reg   (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(MemWriteD),   .q(MemWriteE));
+  flopenrc #(1)  jump_e_reg       (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(JumpD),       .q(JumpE));
+  flopenrc #(1)  branch_e_reg     (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(BranchD),     .q(BranchE));
+  flopenrc #(3)  alucontrol_e_reg (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(ALUControlD), .q(ALUControlE));
+  flopenrc #(1)  alusrc_e_reg     (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(ALUSrcD),     .q(ALUSrcE));
+  flopenrc #(32) rd1_e_reg        (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(RD1D),        .q(RD1E));
+  flopenrc #(32) rd2_e_reg        (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(RD2D),        .q(RD2E));
+  flopenrc #(32) pce_reg          (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(PCD),         .q(PCE));
+  flopenrc #(5)  rs1e_reg         (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(Rs1D),        .q(Rs1E));
+  flopenrc #(5)  rs2e_reg         (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(Rs2D),        .q(Rs2E));
+  flopenrc #(5)  rde_reg          (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(RdD),         .q(RdE));
+  flopenrc #(32) imm_e_reg        (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(ImmExtD),     .q(ImmExtE));
+  flopenrc #(32) pcplus4e_reg     (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(PCPlus4D),    .q(PCPlus4E));
 
   // Registro ID/EX via 2
-  floprc #(1)  regwrite_e2_reg   (.clk(clk), .reset(reset), .clear(FlushE), .d(RegWriteI2),   .q(RegWriteE2));
-  floprc #(2)  resultsrc_e2_reg  (.clk(clk), .reset(reset), .clear(FlushE), .d(ResultSrcI2),  .q(ResultSrcE2));
-  floprc #(1)  memwrite_e2_reg   (.clk(clk), .reset(reset), .clear(FlushE), .d(MemWriteI2),   .q(MemWriteE2));
-  floprc #(1)  jump_e2_reg       (.clk(clk), .reset(reset), .clear(FlushE), .d(JumpI2),       .q(JumpE2));
-  floprc #(1)  branch_e2_reg     (.clk(clk), .reset(reset), .clear(FlushE), .d(BranchI2),     .q(BranchE2));
-  floprc #(3)  alucontrol_e2_reg (.clk(clk), .reset(reset), .clear(FlushE), .d(ALUControlD2), .q(ALUControlE2));
-  floprc #(1)  alusrc_e2_reg     (.clk(clk), .reset(reset), .clear(FlushE), .d(ALUSrcD2),     .q(ALUSrcE2));
-  floprc #(32) rd1_e2_reg        (.clk(clk), .reset(reset), .clear(FlushE), .d(RD1D2),        .q(RD1E2));
-  floprc #(32) rd2_e2_reg        (.clk(clk), .reset(reset), .clear(FlushE), .d(RD2D2),        .q(RD2E2));
-  floprc #(32) pce2_reg          (.clk(clk), .reset(reset), .clear(FlushE), .d(PCD2),         .q(PCE2));
-  floprc #(5)  rs1e2_reg         (.clk(clk), .reset(reset), .clear(FlushE), .d(Rs1D2),        .q(Rs1E2));
-  floprc #(5)  rs2e2_reg         (.clk(clk), .reset(reset), .clear(FlushE), .d(Rs2D2),        .q(Rs2E2));
-  floprc #(5)  rde2_reg          (.clk(clk), .reset(reset), .clear(FlushE), .d(RdI2),         .q(RdE2));
-  floprc #(32) imm_e2_reg        (.clk(clk), .reset(reset), .clear(FlushE), .d(ImmExtD2),     .q(ImmExtE2));
-  floprc #(32) pcplus4e2_reg     (.clk(clk), .reset(reset), .clear(FlushE), .d(PCPlus4D2),    .q(PCPlus4E2));
+  flopenrc #(1)  regwrite_e2_reg   (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(RegWriteI2),   .q(RegWriteE2));
+  flopenrc #(2)  resultsrc_e2_reg  (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(ResultSrcI2),  .q(ResultSrcE2));
+  flopenrc #(1)  memwrite_e2_reg   (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(MemWriteI2),   .q(MemWriteE2));
+  flopenrc #(1)  jump_e2_reg       (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(JumpI2),       .q(JumpE2));
+  flopenrc #(1)  branch_e2_reg     (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(BranchI2),     .q(BranchE2));
+  flopenrc #(3)  alucontrol_e2_reg (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(ALUControlD2), .q(ALUControlE2));
+  flopenrc #(1)  alusrc_e2_reg     (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(ALUSrcD2),     .q(ALUSrcE2));
+  flopenrc #(32) rd1_e2_reg        (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(RD1D2),        .q(RD1E2));
+  flopenrc #(32) rd2_e2_reg        (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(RD2D2),        .q(RD2E2));
+  flopenrc #(32) pce2_reg          (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(PCD2),         .q(PCE2));
+  flopenrc #(5)  rs1e2_reg         (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(Rs1D2),        .q(Rs1E2));
+  flopenrc #(5)  rs2e2_reg         (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(Rs2D2),        .q(Rs2E2));
+  flopenrc #(5)  rde2_reg          (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(RdI2),         .q(RdE2));
+  flopenrc #(32) imm_e2_reg        (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(ImmExtD2),     .q(ImmExtE2));
+  flopenrc #(32) pcplus4e2_reg     (.clk(clk), .reset(reset), .clear(FlushE), .en(~MemStall), .d(PCPlus4D2),    .q(PCPlus4E2));
 
   // EXECUTE (EX) - Dos ALU + Cross-Forwarding + Recurso compartido de Saltos
 
@@ -254,50 +268,53 @@ module datapath(
   assign ResultSrcE2b0  = ResultSrcE2[0];
 
   // Registro EX/MEM via 1 (se conserva incluso si la via 2 toma un salto, por ser mas antigua)
-  flopr #(1)  regwrite_m_reg  (.clk(clk), .reset(reset), .d(RegWriteE),  .q(RegWriteM));
-  flopr #(2)  resultsrc_m_reg (.clk(clk), .reset(reset), .d(ResultSrcE), .q(ResultSrcM));
-  flopr #(1)  memwrite_m_reg  (.clk(clk), .reset(reset), .d(MemWriteE),  .q(MemWriteM));
-  flopr #(32) aluresult_m_reg (.clk(clk), .reset(reset), .d(ALUResultE), .q(ALUResultM));
-  flopr #(32) writedata_m_reg (.clk(clk), .reset(reset), .d(WriteDataE), .q(WriteDataM));
-  flopr #(5)  rdm_reg         (.clk(clk), .reset(reset), .d(RdE),        .q(RdM));
-  flopr #(32) pcplus4m_reg    (.clk(clk), .reset(reset), .d(PCPlus4E),   .q(PCPlus4M));
+  flopenr #(1)  regwrite_m_reg  (.clk(clk), .reset(reset), .en(~MemStall), .d(RegWriteE),  .q(RegWriteM));
+  flopenr #(2)  resultsrc_m_reg (.clk(clk), .reset(reset), .en(~MemStall), .d(ResultSrcE), .q(ResultSrcM));
+  flopenr #(1)  memwrite_m_reg  (.clk(clk), .reset(reset), .en(~MemStall), .d(MemWriteE),  .q(MemWriteM));
+  flopenr #(32) aluresult_m_reg (.clk(clk), .reset(reset), .en(~MemStall), .d(ALUResultE), .q(ALUResultM));
+  flopenr #(32) writedata_m_reg (.clk(clk), .reset(reset), .en(~MemStall), .d(WriteDataE), .q(WriteDataM));
+  flopenr #(5)  rdm_reg         (.clk(clk), .reset(reset), .en(~MemStall), .d(RdE),        .q(RdM));
+  flopenr #(32) pcplus4m_reg    (.clk(clk), .reset(reset), .en(~MemStall), .d(PCPlus4E),   .q(PCPlus4M));
 
   // Registro EX/MEM via 2 (se limpia con FlushM2 = PCSrcE1 si la via 1 toma un salto)
-  floprc #(1)  regwrite_m2_reg  (.clk(clk), .reset(reset), .clear(FlushM2), .d(RegWriteE2),  .q(RegWriteM2));
-  floprc #(2)  resultsrc_m2_reg (.clk(clk), .reset(reset), .clear(FlushM2), .d(ResultSrcE2), .q(ResultSrcM2));
-  floprc #(1)  memwrite_m2_reg  (.clk(clk), .reset(reset), .clear(FlushM2), .d(MemWriteE2),  .q(MemWriteM2));
-  floprc #(32) aluresult_m2_reg (.clk(clk), .reset(reset), .clear(FlushM2), .d(ALUResultE2), .q(ALUResultM2));
-  floprc #(32) writedata_m2_reg (.clk(clk), .reset(reset), .clear(FlushM2), .d(WriteDataE2), .q(WriteDataM2));
-  floprc #(5)  rdm2_reg         (.clk(clk), .reset(reset), .clear(FlushM2), .d(RdE2),        .q(RdM2));
-  floprc #(32) pcplus4m2_reg    (.clk(clk), .reset(reset), .clear(FlushM2), .d(PCPlus4E2),   .q(PCPlus4M2));
+  flopenrc #(1)  regwrite_m2_reg  (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(RegWriteE2),  .q(RegWriteM2));
+  flopenrc #(2)  resultsrc_m2_reg (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(ResultSrcE2), .q(ResultSrcM2));
+  flopenrc #(1)  memwrite_m2_reg  (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(MemWriteE2),  .q(MemWriteM2));
+  flopenrc #(32) aluresult_m2_reg (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(ALUResultE2), .q(ALUResultM2));
+  flopenrc #(32) writedata_m2_reg (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(WriteDataE2), .q(WriteDataM2));
+  flopenrc #(5)  rdm2_reg         (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(RdE2),        .q(RdE2));
+  flopenrc #(32) pcplus4m2_reg    (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(PCPlus4E2),   .q(PCPlus4M2));
 
 
-  // MEMORY (MEM) - Asignacion del unico puerto de memoria de datos (dmem)
+  // MEMORY (MEM) - Señales hacia dcache y puerto de memoria de datos (dmem)
 
+  assign MemReadM        = ResultSrcM[0];
+  assign MemReadM2       = ResultSrcM2[0];
   assign MemAccessM2     = MemWriteM2 | ResultSrcM2[0];
   assign MemWriteM_port  = MemWriteM  | MemWriteM2;
   assign DataAdrM_port   = MemAccessM2 ? ALUResultM2 : ALUResultM;
   assign WriteDataM_port = MemWriteM2  ? WriteDataM2 : WriteDataM;
 
   // Registro MEM/WB via 1
-  flopr #(1)  regwrite_w_reg  (.clk(clk), .reset(reset), .d(RegWriteM),  .q(RegWriteW));
-  flopr #(2)  resultsrc_w_reg (.clk(clk), .reset(reset), .d(ResultSrcM), .q(ResultSrcW));
-  flopr #(32) aluresult_w_reg (.clk(clk), .reset(reset), .d(ALUResultM), .q(ALUResultW));
-  flopr #(32) readdata_w_reg  (.clk(clk), .reset(reset), .d(ReadDataM),  .q(ReadDataW));
-  flopr #(5)  rdw_reg         (.clk(clk), .reset(reset), .d(RdM),        .q(RdW));
-  flopr #(32) pcplus4w_reg    (.clk(clk), .reset(reset), .d(PCPlus4M),   .q(PCPlus4W));
+  flopenr #(1)  regwrite_w_reg  (.clk(clk), .reset(reset), .en(~MemStall), .d(RegWriteM),  .q(RegWriteW));
+  flopenr #(2)  resultsrc_w_reg (.clk(clk), .reset(reset), .en(~MemStall), .d(ResultSrcM), .q(ResultSrcW));
+  flopenr #(32) aluresult_w_reg (.clk(clk), .reset(reset), .en(~MemStall), .d(ALUResultM), .q(ALUResultW));
+  flopenr #(32) readdata_w_reg  (.clk(clk), .reset(reset), .en(~MemStall), .d(ReadDataM),  .q(ReadDataW));
+  flopenr #(5)  rdw_reg         (.clk(clk), .reset(reset), .en(~MemStall), .d(RdM),        .q(RdW));
+  flopenr #(32) pcplus4w_reg    (.clk(clk), .reset(reset), .en(~MemStall), .d(PCPlus4M),   .q(PCPlus4W));
 
   // Registro MEM/WB via 2
-  flopr #(1)  regwrite_w2_reg  (.clk(clk), .reset(reset), .d(RegWriteM2),  .q(RegWriteW2));
-  flopr #(2)  resultsrc_w2_reg (.clk(clk), .reset(reset), .d(ResultSrcM2), .q(ResultSrcW2));
-  flopr #(32) aluresult_w2_reg (.clk(clk), .reset(reset), .d(ALUResultM2), .q(ALUResultW2));
-  flopr #(5)  rdw2_reg         (.clk(clk), .reset(reset), .d(RdM2),        .q(RdW2));
-  flopr #(32) pcplus4w2_reg    (.clk(clk), .reset(reset), .d(PCPlus4M2),   .q(PCPlus4W2));
+  flopenr #(1)  regwrite_w2_reg  (.clk(clk), .reset(reset), .en(~MemStall), .d(RegWriteM2),  .q(RegWriteW2));
+  flopenr #(2)  resultsrc_w2_reg (.clk(clk), .reset(reset), .en(~MemStall), .d(ResultSrcM2), .q(ResultSrcW2));
+  flopenr #(32) aluresult_w2_reg (.clk(clk), .reset(reset), .en(~MemStall), .d(ALUResultM2), .q(ALUResultW2));
+  flopenr #(32) readdata_w2_reg  (.clk(clk), .reset(reset), .en(~MemStall), .d(ReadDataM2),  .q(ReadDataW2));
+  flopenr #(5)  rdw2_reg         (.clk(clk), .reset(reset), .en(~MemStall), .d(RdM2),        .q(RdW2));
+  flopenr #(32) pcplus4w2_reg    (.clk(clk), .reset(reset), .en(~MemStall), .d(PCPlus4M2),   .q(PCPlus4W2));
 
 
   // WRITEBACK (WB)
 
-  mux3 #(32) resultmux  (.d0(ALUResultW),  .d1(ReadDataW), .d2(PCPlus4W),  .s(ResultSrcW),  .y(ResultW));
-  mux3 #(32) resultmux2 (.d0(ALUResultW2), .d1(ReadDataW), .d2(PCPlus4W2), .s(ResultSrcW2), .y(ResultW2));
+  mux3 #(32) resultmux  (.d0(ALUResultW),  .d1(ReadDataW),  .d2(PCPlus4W),  .s(ResultSrcW),  .y(ResultW));
+  mux3 #(32) resultmux2 (.d0(ALUResultW2), .d1(ReadDataW2), .d2(PCPlus4W2), .s(ResultSrcW2), .y(ResultW2));
 
 endmodule

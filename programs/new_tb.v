@@ -5,13 +5,19 @@ module tb_e2_core #(
     parameter MEM_FILE = "prog5_dual_alu.mem",
     parameter [31:0] DONE_PC = 32'h00000068,
     parameter [31:0] FIRST0 = 32'h00a00093,
-    parameter [31:0] FIRST1 = 32'h01400113
+    parameter [31:0] FIRST1 = 32'h01400113,
+    parameter ENABLE_DCACHE = 1,
+    parameter SINGLE_ISSUE  = 0
 );
     reg clk, reset;
     wire [31:0] WriteData, DataAdr;
     wire MemWrite;
 
-    top #(.MEM_FILE(MEM_FILE)) dut (
+    top #(
+        .MEM_FILE(MEM_FILE),
+        .ENABLE_DCACHE(ENABLE_DCACHE),
+        .SINGLE_ISSUE(SINGLE_ISSUE)
+    ) dut (
         .clk(clk),
         .reset(reset),
         .WriteData(WriteData),
@@ -151,21 +157,52 @@ module tb_e2_core #(
     wire [31:0] mem120 = dut.dmem.RAM[30];
     wire [31:0] mem124 = dut.dmem.RAM[31];
 
-    wire [31:0] x1 = dut.rvpipe.dp.rf.rf[1];
-    wire [31:0] x2 = dut.rvpipe.dp.rf.rf[2];
-    wire [31:0] x3 = dut.rvpipe.dp.rf.rf[3];
-    wire [31:0] x5 = dut.rvpipe.dp.rf.rf[5];
-    wire [31:0] x6 = dut.rvpipe.dp.rf.rf[6];
-    wire [31:0] x7 = dut.rvpipe.dp.rf.rf[7];
-    wire [31:0] x8 = dut.rvpipe.dp.rf.rf[8];
-    wire [31:0] x9 = dut.rvpipe.dp.rf.rf[9];
+    wire [31:0] x1  = dut.rvpipe.dp.rf.rf[1];
+    wire [31:0] x2  = dut.rvpipe.dp.rf.rf[2];
+    wire [31:0] x3  = dut.rvpipe.dp.rf.rf[3];
+    wire [31:0] x4  = dut.rvpipe.dp.rf.rf[4];
+    wire [31:0] x5  = dut.rvpipe.dp.rf.rf[5];
+    wire [31:0] x6  = dut.rvpipe.dp.rf.rf[6];
+    wire [31:0] x7  = dut.rvpipe.dp.rf.rf[7];
+    wire [31:0] x8  = dut.rvpipe.dp.rf.rf[8];
+    wire [31:0] x9  = dut.rvpipe.dp.rf.rf[9];
     wire [31:0] x10 = dut.rvpipe.dp.rf.rf[10];
     wire [31:0] x11 = dut.rvpipe.dp.rf.rf[11];
     wire [31:0] x12 = dut.rvpipe.dp.rf.rf[12];
     wire [31:0] x13 = dut.rvpipe.dp.rf.rf[13];
+    wire [31:0] x14 = dut.rvpipe.dp.rf.rf[14];
+    wire [31:0] x15 = dut.rvpipe.dp.rf.rf[15];
     wire [31:0] x16 = dut.rvpipe.dp.rf.rf[16];
+    wire [31:0] x17 = dut.rvpipe.dp.rf.rf[17];
     wire [31:0] x18 = dut.rvpipe.dp.rf.rf[18];
+    wire [31:0] x19 = dut.rvpipe.dp.rf.rf[19];
     wire [31:0] x20 = dut.rvpipe.dp.rf.rf[20];
+    wire [31:0] x21 = dut.rvpipe.dp.rf.rf[21];
+    wire [31:0] x22 = dut.rvpipe.dp.rf.rf[22];
+    wire [31:0] x23 = dut.rvpipe.dp.rf.rf[23];
+    wire [31:0] x24 = dut.rvpipe.dp.rf.rf[24];
+    wire [31:0] x25 = dut.rvpipe.dp.rf.rf[25];
+    wire [31:0] x26 = dut.rvpipe.dp.rf.rf[26];
+    wire [31:0] x27 = dut.rvpipe.dp.rf.rf[27];
+    wire [31:0] x28 = dut.rvpipe.dp.rf.rf[28];
+    wire [31:0] x29 = dut.rvpipe.dp.rf.rf[29];
+    wire [31:0] x30 = dut.rvpipe.dp.rf.rf[30];
+    wire [31:0] x31 = dut.rvpipe.dp.rf.rf[31];
+
+    wire [31:0] M_x1_0  = dut.dmem.RAM[384];
+    wire [31:0] M_x1_4  = dut.dmem.RAM[385];
+    wire [31:0] M_x1_8  = dut.dmem.RAM[386];
+    wire [31:0] M_x1_12 = dut.dmem.RAM[387];
+    wire [31:0] M_x1_16 = dut.dmem.RAM[388];
+    wire [31:0] M_x1_20 = dut.dmem.RAM[389];
+    wire [31:0] M_x1_24 = dut.dmem.RAM[390];
+    wire [31:0] M_x1_28 = dut.dmem.RAM[391];
+    wire [31:0] M_x1_32 = dut.dmem.RAM[392];
+    wire [31:0] M_x1_36 = dut.dmem.RAM[393];
+    wire [31:0] M_x1_40 = dut.dmem.RAM[394];
+    wire [31:0] M_x1_44 = dut.dmem.RAM[395];
+    wire [31:0] M_x1_48 = dut.dmem.RAM[396];
+    wire [31:0] M_x1_52 = dut.dmem.RAM[397];
 
     reg [31:0] InstrE, InstrE2;
     reg [31:0] InstrM, InstrM2;
@@ -247,8 +284,23 @@ module tb_e2_core #(
     wire [31:0] ipc_x1000 = (ciclos > 0) ?
         ((retiradas1 + retiradas2) * 1000) / ciclos : 32'b0;
 
+    wire check_etapa_A = !reset && !MemStall && ((validW && PCW == 32'h00000034) || (validW2 && PCW2 == 32'h00000034));
+    wire check_etapa_B = !reset && !MemStall && ((validW && PCW == 32'h00000060) || (validW2 && PCW2 == 32'h00000060));
+    wire check_etapa_C = !reset && !MemStall && ((validW && PCW == 32'h000000e0) || (validW2 && PCW2 == 32'h000000e0));
+    wire check_etapa_D = !reset && !MemStall && ((validW && PCW == 32'h00000160) || (validW2 && PCW2 == 32'h00000160));
+
+    reg ok_etapa_A, ok_etapa_B, ok_etapa_C, ok_etapa_D;
+    integer ciclo_etapa_A, ciclo_etapa_B, ciclo_etapa_C, ciclo_etapa_D;
+    integer ciclos_totales, instr_retiradas, fin_wb_seen;
+
     initial begin
         reset = 1;
+
+        ok_etapa_A = 0; ok_etapa_B = 0; ok_etapa_C = 0; ok_etapa_D = 0;
+        ciclo_etapa_A = 0; ciclo_etapa_B = 0; ciclo_etapa_C = 0; ciclo_etapa_D = 0;
+        ciclos_totales = 0;
+        instr_retiradas = 0;
+        fin_wb_seen = 0;
 
         ciclos = 0;
         dual_issue = 0;
@@ -312,6 +364,18 @@ module tb_e2_core #(
     always @(posedge clk) begin
         if (!reset && !finalizado) begin
             ciclos = ciclos + 1;
+
+            if (!MemStall && !fin_wb_seen) begin
+                if (validM && (PCM != DONE_PC))
+                    instr_retiradas = instr_retiradas + 1;
+                if (validM2 && (PCM2 != DONE_PC))
+                    instr_retiradas = instr_retiradas + 1;
+                if ((validM && PCM == (DONE_PC - 32'd4)) ||
+                    (validM2 && PCM2 == (DONE_PC - 32'd4))) begin
+                    ciclos_totales = ciclos;
+                    fin_wb_seen = 1;
+                end
+            end
 
             if (IssueSlot2D &&
                 (InstrD != 0) &&
@@ -416,11 +480,12 @@ module tb_e2_core #(
 
             if (MemWrite === 1'b1) begin
                 if ((^DataAdr === 1'bx) ||
-                    (DataAdr >= 256) ||
+                    ((PROG != 11) && (DataAdr >= 256)) ||
+                    ((PROG == 11) && ((DataAdr < 1536) || (DataAdr > 1588))) ||
                     (DataAdr[1:0] != 0)) begin
                     escrituras_inesperadas =
                         escrituras_inesperadas + 1;
-                end else begin
+                end else if (PROG != 11) begin
                     escrituras_pc[DataAdr[7:2]] =
                         escrituras_pc[DataAdr[7:2]] + 1;
                 end
@@ -444,10 +509,45 @@ module tb_e2_core #(
                         escrituras_mismo_registro + 1;
             end
 
+            if (PROG == 11) begin
+                if (check_etapa_A) begin
+                    ciclo_etapa_A = ciclos;
+                    if (x1==1536 && x2==12 && x3==3 && x4==5 && x5==15 && x6==7 && x7==2 &&
+                        x8==20 && x9==19 && x10==1 && M_x1_0==20 && M_x1_4==19 && M_x1_8==1)
+                        ok_etapa_A = 1'b1;
+                    else
+                        errores = errores + 1;
+                end
+                if (check_etapa_B) begin
+                    ciclo_etapa_B = ciclos;
+                    if (x11==20 && x12==19 && x13==39 && x14==30 && x15==28 && x16==2 &&
+                        x17==69 && x18==57 && M_x1_12==39 && M_x1_16==69 && M_x1_20==57)
+                        ok_etapa_B = 1'b1;
+                    else
+                        errores = errores + 1;
+                end
+                if (check_etapa_C) begin
+                    ciclo_etapa_C = ciclos;
+                    if (x19==78 && x20==13 && x21==209 && x22==13 && x23==12 && x24==36 &&
+                        x25==13 && M_x1_24==78 && M_x1_28==209 && M_x1_32==36)
+                        ok_etapa_C = 1'b1;
+                    else
+                        errores = errores + 1;
+                end
+                if (check_etapa_D) begin
+                    ciclo_etapa_D = ciclos;
+                    if (x26==126 && x27==209 && x28==142 && x29==285 && x30==78 && x31==363 &&
+                        M_x1_36==126 && M_x1_40==209 && M_x1_44==142 && M_x1_48==285 && M_x1_52==363)
+                        ok_etapa_D = 1'b1;
+                    else
+                        errores = errores + 1;
+                end
+            end
+
             if (done_seen >= 3) begin
                 verificar();
                 finalizado = 1;
-            end else if (ciclos > 400) begin
+            end else if (ciclos > 1000) begin
                 timeout = 1;
                 errores = errores + 1;
                 finalizado = 1;
@@ -629,47 +729,72 @@ module tb_e2_core #(
                     check_reg(13,160);
                     check_reg(14,32);
                     check_reg(15,48);
+                    check_reg(16,0);
+                    check_reg(17,16);
+                    check_reg(19,32);
                     check_reg(21,192);
                     check_reg(22,98);
                     check_reg(23,100);
 
-                    check_event(cache_hits > 0 && dual_mem_pairs > 0);
+                    if (ENABLE_DCACHE && !SINGLE_ISSUE)
+                        check_event(cache_hits > 0 && dual_mem_pairs > 0);
+                end
+
+                11: begin
+                    if (M_x1_0  !== 32'd20)  errores = errores + 1;
+                    if (M_x1_4  !== 32'd19)  errores = errores + 1;
+                    if (M_x1_8  !== 32'd1)   errores = errores + 1;
+                    if (M_x1_12 !== 32'd39)  errores = errores + 1;
+                    if (M_x1_16 !== 32'd69)  errores = errores + 1;
+                    if (M_x1_20 !== 32'd57)  errores = errores + 1;
+                    if (M_x1_24 !== 32'd78)  errores = errores + 1;
+                    if (M_x1_28 !== 32'd209) errores = errores + 1;
+                    if (M_x1_32 !== 32'd36)  errores = errores + 1;
+                    if (M_x1_36 !== 32'd126) errores = errores + 1;
+                    if (M_x1_40 !== 32'd209) errores = errores + 1;
+                    if (M_x1_44 !== 32'd142) errores = errores + 1;
+                    if (M_x1_48 !== 32'd285) errores = errores + 1;
+                    if (M_x1_52 !== 32'd363) errores = errores + 1;
+                    check_reg(31,363);
+                    check_event(ok_etapa_A && ok_etapa_B && ok_etapa_C && ok_etapa_D);
                 end
             endcase
 
             if (escrituras_inesperadas > 0)
                 errores = errores + 1;
 
-            for (j=0; j<64; j=j+1) begin
-                if (j < 16 || j > 31) begin
-                    if (escrituras_pc[j] != 0)
-                        errores = errores + 1;
-                end else begin
-                    case (PROG)
-                        5: if (j > 25 &&
-                               escrituras_pc[j] != 0)
-                               errores = errores + 1;
+            if (PROG != 11) begin
+                for (j=0; j<64; j=j+1) begin
+                    if (j < 16 || j > 31) begin
+                        if (escrituras_pc[j] != 0)
+                            errores = errores + 1;
+                    end else begin
+                        case (PROG)
+                            5: if (j > 25 &&
+                                   escrituras_pc[j] != 0)
+                                   errores = errores + 1;
 
-                        6: if (j > 24 &&
-                               escrituras_pc[j] != 0)
-                               errores = errores + 1;
+                            6: if (j > 24 &&
+                                   escrituras_pc[j] != 0)
+                                   errores = errores + 1;
 
-                        7: if (j > 31 &&
-                               escrituras_pc[j] != 0)
-                               errores = errores + 1;
+                            7: if (j > 31 &&
+                                   escrituras_pc[j] != 0)
+                                   errores = errores + 1;
 
-                        8: if (j > 20 &&
-                               escrituras_pc[j] != 0)
-                               errores = errores + 1;
+                            8: if (j > 20 &&
+                                   escrituras_pc[j] != 0)
+                                   errores = errores + 1;
 
-                        9: if (j > 19 &&
-                               escrituras_pc[j] != 0)
-                               errores = errores + 1;
+                            9: if (j > 19 &&
+                                   escrituras_pc[j] != 0)
+                                   errores = errores + 1;
 
-                        10: if (j > 28 &&
-                                escrituras_pc[j] != 0)
-                                errores = errores + 1;
-                    endcase
+                            10: if (j > 28 &&
+                                    escrituras_pc[j] != 0)
+                                    errores = errores + 1;
+                        endcase
+                    end
                 end
             end
 
@@ -728,12 +853,74 @@ module tb_prog9;
     ) u();
 endmodule
 
+module tb_prog10_single;
+    tb_e2_core #(
+        .PROG(10),
+        .MEM_FILE("prog10_cache_eval.mem"),
+        .DONE_PC(32'h000000e8),
+        .FIRST0(32'h04000a13),
+        .FIRST1(32'h00300913),
+        .ENABLE_DCACHE(0),
+        .SINGLE_ISSUE(1)
+    ) u();
+endmodule
+
+module tb_prog10_dual;
+    tb_e2_core #(
+        .PROG(10),
+        .MEM_FILE("prog10_cache_eval.mem"),
+        .DONE_PC(32'h000000e8),
+        .FIRST0(32'h04000a13),
+        .FIRST1(32'h00300913),
+        .ENABLE_DCACHE(0),
+        .SINGLE_ISSUE(0)
+    ) u();
+endmodule
+
 module tb_prog10;
     tb_e2_core #(
         .PROG(10),
         .MEM_FILE("prog10_cache_eval.mem"),
         .DONE_PC(32'h000000e8),
         .FIRST0(32'h04000a13),
-        .FIRST1(32'h00300913)
+        .FIRST1(32'h00300913),
+        .ENABLE_DCACHE(1),
+        .SINGLE_ISSUE(0)
+    ) u();
+endmodule
+
+module tb_ef_oficial_single;
+    tb_e2_core #(
+        .PROG(11),
+        .MEM_FILE("prog_ef_oficial.mem"),
+        .DONE_PC(32'h00000164),
+        .FIRST0(32'h60000093),
+        .FIRST1(32'h00c00113),
+        .ENABLE_DCACHE(0),
+        .SINGLE_ISSUE(1)
+    ) u();
+endmodule
+
+module tb_ef_oficial_dual_e2;
+    tb_e2_core #(
+        .PROG(11),
+        .MEM_FILE("prog_ef_oficial.mem"),
+        .DONE_PC(32'h00000164),
+        .FIRST0(32'h60000093),
+        .FIRST1(32'h00c00113),
+        .ENABLE_DCACHE(0),
+        .SINGLE_ISSUE(0)
+    ) u();
+endmodule
+
+module tb_ef_oficial;
+    tb_e2_core #(
+        .PROG(11),
+        .MEM_FILE("prog_ef_oficial.mem"),
+        .DONE_PC(32'h00000164),
+        .FIRST0(32'h60000093),
+        .FIRST1(32'h00c00113),
+        .ENABLE_DCACHE(1),
+        .SINGLE_ISSUE(0)
     ) u();
 endmodule

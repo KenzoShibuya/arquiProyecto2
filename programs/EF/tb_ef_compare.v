@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
 
 // ============================================================================
-// Testbench para Entrega Final (EF):
-//   1. tb_prog10         : Simula prog10_cache_eval.mem en Configuracion C
+// Testbench para Entrega Final (EF) - Benchmark propio P10:
+//   1. tb_prog10_cache   : Simula prog10_cache_eval.mem en Configuracion C
 //                          (Dual-Issue + Cache L1 Fully Associative de 8 lineas)
 //                          exponiendo todas las senales de cache para waveforms.
 //   2. tb_ef_compare_all : Instancia simultaneamente las 3 configuraciones:
@@ -142,11 +142,14 @@ module tb_ef_core #(
     wire [31:0] x13 = dut.rvpipe.dp.rf.rf[13];
     wire [31:0] x14 = dut.rvpipe.dp.rf.rf[14];
     wire [31:0] x15 = dut.rvpipe.dp.rf.rf[15];
+    wire [31:0] x16 = dut.rvpipe.dp.rf.rf[16];
+    wire [31:0] x17 = dut.rvpipe.dp.rf.rf[17];
+    wire [31:0] x19 = dut.rvpipe.dp.rf.rf[19];
     wire [31:0] x21 = dut.rvpipe.dp.rf.rf[21];
     wire [31:0] x22 = dut.rvpipe.dp.rf.rf[22];
     wire [31:0] x23 = dut.rvpipe.dp.rf.rf[23];
 
-    integer ciclos, dual_issue, single_issue;
+    integer ciclos, ciclos_utiles, dual_issue, single_issue;
     integer raw_conflicts, mem_conflicts, ctrl_conflicts;
     integer stalls, mem_stalls, flushes;
     integer done_seen, errores, finalizado;
@@ -154,6 +157,7 @@ module tb_ef_core #(
     initial begin
         reset = 1;
         ciclos = 0;
+        ciclos_utiles = 0;
         dual_issue = 0;
         single_issue = 0;
         raw_conflicts = 0;
@@ -191,8 +195,11 @@ module tb_ef_core #(
             if (MemStall) mem_stalls = mem_stalls + 1;
             if (FlushD)   flushes    = flushes    + 1;
 
-            if (!MemStall && ((PCSrcE1 && PCE == DONE_PC) || (PCSrcE2 && PCE2 == DONE_PC)))
+            if (!MemStall && ((PCSrcE1 && PCE == DONE_PC) || (PCSrcE2 && PCE2 == DONE_PC))) begin
+                if (done_seen == 0)
+                    ciclos_utiles = ciclos;
                 done_seen = done_seen + 1;
+            end
         end
     end
 
@@ -216,6 +223,9 @@ module tb_ef_core #(
                 if (x13    !== 32'd160) errores = errores + 1;
                 if (x14    !== 32'd32)  errores = errores + 1;
                 if (x15    !== 32'd48)  errores = errores + 1;
+                if (x16    !== 32'd0)   errores = errores + 1;
+                if (x17    !== 32'd16)  errores = errores + 1;
+                if (x19    !== 32'd32)  errores = errores + 1;
                 if (x21    !== 32'd192) errores = errores + 1;
                 if (x22    !== 32'd98)  errores = errores + 1;
                 if (x23    !== 32'd100) errores = errores + 1;
@@ -229,7 +239,7 @@ module tb_ef_core #(
 endmodule
 
 // Top-level para visualizar waveforms de P10 con Cache L1 activa
-module tb_prog10;
+module tb_prog10_cache;
     tb_ef_core #(
         .MEM_FILE("prog10_cache_eval.mem"),
         .ENABLE_DCACHE(1),
@@ -243,12 +253,29 @@ module tb_ef_compare_all;
     tb_ef_core #(.MEM_FILE("prog10_cache_eval.mem"), .ENABLE_DCACHE(0), .SINGLE_ISSUE(0)) cfg_B_dual_base();
     tb_ef_core #(.MEM_FILE("prog10_cache_eval.mem"), .ENABLE_DCACHE(1), .SINGLE_ISSUE(0)) cfg_C_dual_cache();
 
+    // Senales de resumen en el top-level para el waveform viewer
+    wire [31:0] ciclos_A         = cfg_A_single.ciclos;
+    wire [31:0] ciclos_B         = cfg_B_dual_base.ciclos;
+    wire [31:0] ciclos_C         = cfg_C_dual_cache.ciclos;
+    wire [31:0] ciclos_utiles_A  = cfg_A_single.ciclos_utiles;
+    wire [31:0] ciclos_utiles_B  = cfg_B_dual_base.ciclos_utiles;
+    wire [31:0] ciclos_utiles_C  = cfg_C_dual_cache.ciclos_utiles;
+    wire [31:0] mem_conflicts_B  = cfg_B_dual_base.mem_conflicts;
+    wire [31:0] mem_conflicts_C  = cfg_C_dual_cache.mem_conflicts;
+    wire [31:0] cache_hits_C     = cfg_C_dual_cache.cache_hits;
+    wire [31:0] cache_accesses_C = cfg_C_dual_cache.cache_accesses;
+    wire [31:0] dual_mem_pairs_C = cfg_C_dual_cache.dual_mem_pairs;
+
     integer idx, diff_errors;
+    wire all_ok = cfg_A_single.finalizado && cfg_B_dual_base.finalizado && cfg_C_dual_cache.finalizado &&
+                  (cfg_A_single.errores == 0) && (cfg_B_dual_base.errores == 0) && (cfg_C_dual_cache.errores == 0) &&
+                  (diff_errors == 0);
+
     initial begin
         diff_errors = 0;
         wait(cfg_A_single.finalizado && cfg_B_dual_base.finalizado && cfg_C_dual_cache.finalizado);
         #1;
-        for (idx = 0; idx < 64; idx = idx + 1) begin
+        for (idx = 0; idx < 512; idx = idx + 1) begin
             if (cfg_A_single.dut.dmem.RAM[idx] !== cfg_B_dual_base.dut.dmem.RAM[idx] ||
                 cfg_B_dual_base.dut.dmem.RAM[idx] !== cfg_C_dual_cache.dut.dmem.RAM[idx])
                 diff_errors = diff_errors + 1;
@@ -262,11 +289,11 @@ module tb_ef_compare_all;
         $display(" COMPARACION ENTREGA FINAL (EF) - prog10_cache_eval");
         $display("====================================================================");
         $display(" Config A (Single-Issue E1)    : %0d ciclos (utiles: %0d), errores=%0d",
-                 cfg_A_single.ciclos, cfg_A_single.ciclos - 5, cfg_A_single.errores);
+                 cfg_A_single.ciclos, cfg_A_single.ciclos_utiles, cfg_A_single.errores);
         $display(" Config B (Dual-Issue Base E2) : %0d ciclos (utiles: %0d), mem_conflicts=%0d, errores=%0d",
-                 cfg_B_dual_base.ciclos, cfg_B_dual_base.ciclos - 5, cfg_B_dual_base.mem_conflicts, cfg_B_dual_base.errores);
+                 cfg_B_dual_base.ciclos, cfg_B_dual_base.ciclos_utiles, cfg_B_dual_base.mem_conflicts, cfg_B_dual_base.errores);
         $display(" Config C (Dual-Issue + L1 EF) : %0d ciclos (utiles: %0d), mem_conflicts=%0d, hits=%0d/%0d, dual_mem=%0d, errores=%0d",
-                 cfg_C_dual_cache.ciclos, cfg_C_dual_cache.ciclos - 5, cfg_C_dual_cache.mem_conflicts,
+                 cfg_C_dual_cache.ciclos, cfg_C_dual_cache.ciclos_utiles, cfg_C_dual_cache.mem_conflicts,
                  cfg_C_dual_cache.cache_hits, cfg_C_dual_cache.cache_accesses,
                  cfg_C_dual_cache.dual_mem_pairs, cfg_C_dual_cache.errores);
         $display(" Equivalencia funcional A == B == C : diff_errors = %0d", diff_errors);

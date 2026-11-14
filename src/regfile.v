@@ -12,6 +12,12 @@ module regfile(
     input  [31:0] wd1
 );
   reg [31:0] rf[31:0];
+  integer i;
+
+  initial begin
+    for (i = 0; i < 32; i = i + 1)
+      rf[i] = 32'h00000000;
+  end
 
   always @(negedge clk) begin
     if (we0 & (wa0 != 5'b0)) rf[wa0] <= wd0;

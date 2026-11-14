@@ -85,8 +85,8 @@ post:
         sw   x12, 36(x20)      # 0xbc: par v2 : M[100] = 50 (DUAL lw+sw, reemplazo FIFO linea 1)
         lw   x15, 8(x20)       # 0xc0: par v1 : x15 = M[72] = 48  (Hit L1 en linea 2)
         lw   x16, 40(x20)      # 0xc4: par v2 : x16 = M[104] = 0  (Hit + Cold Miss -> sin MemStall)
-        lw   x17, 44(x20)      # 0xc8: par v1 : x17 = M[108] = 0  (Cold Miss en Via 1)
-        lw   x19, 48(x20)      # 0xcc: par v2 : x19 = M[112] = 0  (Cold Miss en Via 2 -> MemStall = 1!)
+        lw   x17, 0(x20)       # 0xc8: par v1 : x17 = M[64] = 16  (Miss por desalojo FIFO de linea 0)
+        lw   x19, 4(x20)       # 0xcc: par v2 : x19 = M[68] = 32  (Miss por desalojo FIFO de linea 1 -> MemStall = 1!)
         add  x21, x13, x14     # 0xd0: par v1 : x21 = 160 + 32 = 192
         add  x22, x15, x12     # 0xd4: par v2 : x22 = 48  + 50 = 98  (DUAL ALU)
         sw   x21, 40(x20)      # 0xd8: par v1 : M[104] = 192

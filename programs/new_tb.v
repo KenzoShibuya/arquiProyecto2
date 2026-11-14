@@ -291,7 +291,7 @@ module tb_e2_core #(
 
     reg ok_etapa_A, ok_etapa_B, ok_etapa_C, ok_etapa_D;
     integer ciclo_etapa_A, ciclo_etapa_B, ciclo_etapa_C, ciclo_etapa_D;
-    integer ciclos_totales, instr_retiradas, fin_wb_seen;
+    integer ciclos_totales, instr_retiradas, fin_wb_seen, mem_stalls;
 
     initial begin
         reset = 1;
@@ -301,6 +301,7 @@ module tb_e2_core #(
         ciclos_totales = 0;
         instr_retiradas = 0;
         fin_wb_seen = 0;
+        mem_stalls = 0;
 
         ciclos = 0;
         dual_issue = 0;
@@ -364,6 +365,9 @@ module tb_e2_core #(
     always @(posedge clk) begin
         if (!reset && !finalizado) begin
             ciclos = ciclos + 1;
+
+            if (!fin_wb_seen && MemStall)
+                mem_stalls = mem_stalls + 1;
 
             if (!MemStall && !fin_wb_seen) begin
                 if (validM && (PCM != DONE_PC))
@@ -512,32 +516,33 @@ module tb_e2_core #(
             if (PROG == 11) begin
                 if (check_etapa_A) begin
                     ciclo_etapa_A = ciclos;
-                    if (x1==1536 && x2==12 && x3==3 && x4==5 && x5==15 && x6==7 && x7==2 &&
-                        x8==20 && x9==19 && x10==1 && M_x1_0==20 && M_x1_4==19 && M_x1_8==1)
+                    if (x1==1536 && x2==1 && x3==8 && x4==3 && x5==11 && x6==5 && x7==16 &&
+                        x8==2 && x9==7 && x10==12 && M_x1_0==11 && M_x1_4==5 && M_x1_8==12)
                         ok_etapa_A = 1'b1;
                     else
                         errores = errores + 1;
                 end
                 if (check_etapa_B) begin
                     ciclo_etapa_B = ciclos;
-                    if (x11==20 && x12==19 && x13==39 && x14==30 && x15==28 && x16==2 &&
-                        x17==69 && x18==57 && M_x1_12==39 && M_x1_16==69 && M_x1_20==57)
+                    if (x11==11 && x12==16 && x13==5 && x14==12 && x15==7 && x16==7 &&
+                        x17==16 && x18==23 && M_x1_12==7 && M_x1_16==16 && M_x1_20==23)
                         ok_etapa_B = 1'b1;
                     else
                         errores = errores + 1;
                 end
                 if (check_etapa_C) begin
                     ciclo_etapa_C = ciclos;
-                    if (x19==78 && x20==13 && x21==209 && x22==13 && x23==12 && x24==36 &&
-                        x25==13 && M_x1_24==78 && M_x1_28==209 && M_x1_32==36)
+                    if (x19==12 && x20==12 && x21==24 && x22==18 && x23==0 && x24==24 &&
+                        x25==0 && x26==6 && M_x1_24==24 && M_x1_28==18 && M_x1_32==24)
                         ok_etapa_C = 1'b1;
                     else
                         errores = errores + 1;
                 end
                 if (check_etapa_D) begin
                     ciclo_etapa_D = ciclos;
-                    if (x26==126 && x27==209 && x28==142 && x29==285 && x30==78 && x31==363 &&
-                        M_x1_36==126 && M_x1_40==209 && M_x1_44==142 && M_x1_48==285 && M_x1_52==363)
+                    if (x19==6 && x20==6 && x21==24 && x22==18 && x24==24 && x25==4 &&
+                        x26==4 && x27==1560 && x28==74 && x29==4 && x30==23 && x31==1 &&
+                        M_x1_36==74 && M_x1_40==4 && M_x1_44==0 && M_x1_48==1 && M_x1_52==1)
                         ok_etapa_D = 1'b1;
                     else
                         errores = errores + 1;
@@ -741,21 +746,36 @@ module tb_e2_core #(
                 end
 
                 11: begin
-                    if (M_x1_0  !== 32'd20)  errores = errores + 1;
-                    if (M_x1_4  !== 32'd19)  errores = errores + 1;
-                    if (M_x1_8  !== 32'd1)   errores = errores + 1;
-                    if (M_x1_12 !== 32'd39)  errores = errores + 1;
-                    if (M_x1_16 !== 32'd69)  errores = errores + 1;
-                    if (M_x1_20 !== 32'd57)  errores = errores + 1;
-                    if (M_x1_24 !== 32'd78)  errores = errores + 1;
-                    if (M_x1_28 !== 32'd209) errores = errores + 1;
-                    if (M_x1_32 !== 32'd36)  errores = errores + 1;
-                    if (M_x1_36 !== 32'd126) errores = errores + 1;
-                    if (M_x1_40 !== 32'd209) errores = errores + 1;
-                    if (M_x1_44 !== 32'd142) errores = errores + 1;
-                    if (M_x1_48 !== 32'd285) errores = errores + 1;
-                    if (M_x1_52 !== 32'd363) errores = errores + 1;
-                    check_reg(31,363);
+                    if (M_x1_0  !== 32'd11) errores = errores + 1;
+                    if (M_x1_4  !== 32'd5)  errores = errores + 1;
+                    if (M_x1_8  !== 32'd12) errores = errores + 1;
+                    if (M_x1_12 !== 32'd7)  errores = errores + 1;
+                    if (M_x1_16 !== 32'd16) errores = errores + 1;
+                    if (M_x1_20 !== 32'd23) errores = errores + 1;
+                    if (M_x1_24 !== 32'd24) errores = errores + 1;
+                    if (M_x1_28 !== 32'd18) errores = errores + 1;
+                    if (M_x1_32 !== 32'd24) errores = errores + 1;
+                    if (M_x1_36 !== 32'd74) errores = errores + 1;
+                    if (M_x1_40 !== 32'd4)  errores = errores + 1;
+                    if (M_x1_44 !== 32'd0)  errores = errores + 1;
+                    if (M_x1_48 !== 32'd1)  errores = errores + 1;
+                    if (M_x1_52 !== 32'd1)  errores = errores + 1;
+                    check_reg(1,  1536);
+                    check_reg(2,  1);
+                    check_reg(5,  11);
+                    check_reg(6,  5);
+                    check_reg(10, 12);
+                    check_reg(12, 16);
+                    check_reg(15, 7);
+                    check_reg(18, 23);
+                    check_reg(21, 24);
+                    check_reg(22, 18);
+                    check_reg(24, 24);
+                    check_reg(27, 1560);
+                    check_reg(28, 74);
+                    check_reg(29, 4);
+                    check_reg(30, 23);
+                    check_reg(31, 1);
                     check_event(ok_etapa_A && ok_etapa_B && ok_etapa_C && ok_etapa_D);
                 end
             endcase
@@ -895,7 +915,7 @@ module tb_ef_oficial_single;
         .MEM_FILE("prog_ef_oficial.mem"),
         .DONE_PC(32'h00000164),
         .FIRST0(32'h60000093),
-        .FIRST1(32'h00c00113),
+        .FIRST1(32'h00100113),
         .ENABLE_DCACHE(0),
         .SINGLE_ISSUE(1)
     ) u();
@@ -907,7 +927,7 @@ module tb_ef_oficial_dual_e2;
         .MEM_FILE("prog_ef_oficial.mem"),
         .DONE_PC(32'h00000164),
         .FIRST0(32'h60000093),
-        .FIRST1(32'h00c00113),
+        .FIRST1(32'h00100113),
         .ENABLE_DCACHE(0),
         .SINGLE_ISSUE(0)
     ) u();
@@ -919,7 +939,7 @@ module tb_ef_oficial;
         .MEM_FILE("prog_ef_oficial.mem"),
         .DONE_PC(32'h00000164),
         .FIRST0(32'h60000093),
-        .FIRST1(32'h00c00113),
+        .FIRST1(32'h00100113),
         .ENABLE_DCACHE(1),
         .SINGLE_ISSUE(0)
     ) u();

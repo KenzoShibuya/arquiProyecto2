@@ -30,7 +30,7 @@ module tb_ef_oficial_core #(
     parameter [31:0] PC_ETAPA_D = 32'h00000160,
     parameter [31:0] DONE_PC    = 32'h00000164,
     parameter [31:0] FIRST0     = 32'h60000093, // addi x1, x0, 1536
-    parameter [31:0] FIRST1     = 32'h00c00113  // addi x2, x0, 12
+    parameter [31:0] FIRST1     = 32'h00100113  // addi x2, x0, 1
 );
     reg clk, reset;
     wire [31:0] WriteData, DataAdr;
@@ -241,6 +241,11 @@ module tb_ef_oficial_core #(
         if (!reset && !finalizado) begin
             ciclos = ciclos + 1;
 
+            if (!fin_wb_seen) begin
+                if (StallF)   stalls     = stalls     + 1;
+                if (MemStall) mem_stalls = mem_stalls + 1;
+            end
+
             // Conteo de instrucciones retiradas y ciclos utiles (sin contar 'fin' en 0x164)
             if (!MemStall && !fin_wb_seen) begin
                 if (validM1 && (PCM1 != DONE_PC))
@@ -265,8 +270,6 @@ module tb_ef_oficial_core #(
                     if (mem_conflict)  mem_conflicts  = mem_conflicts  + 1;
                     if (ctrl_conflict) ctrl_conflicts = ctrl_conflicts + 1;
                 end
-                if (StallF)   stalls     = stalls     + 1;
-                if (MemStall) mem_stalls = mem_stalls + 1;
                 if (FlushD)   flushes    = flushes    + 1;
             end
 
@@ -281,93 +284,144 @@ module tb_ef_oficial_core #(
         if (!reset && !finalizado) begin
             // ----------------------------------------------------------------
             // 3.1 Fin de Etapa A
+            // x1=1536, x2=1, x3=8, x4=3, x5=11, x6=5, x7=16, x8=2, x9=7, x10=12
+            // M[x1+0]=11, M[x1+4]=5, M[x1+8]=12
             // ----------------------------------------------------------------
             if (check_etapa_A) begin
                 ciclo_etapa_A = ciclos;
                 if (x1  !== 32'd1536) err_etapa_A = err_etapa_A + 1;
-                if (x2  !== 32'd12)   err_etapa_A = err_etapa_A + 1;
-                if (x3  !== 32'd3)    err_etapa_A = err_etapa_A + 1;
-                if (x4  !== 32'd5)    err_etapa_A = err_etapa_A + 1;
-                if (x5  !== 32'd15)   err_etapa_A = err_etapa_A + 1;
-                if (x6  !== 32'd7)    err_etapa_A = err_etapa_A + 1;
-                if (x7  !== 32'd2)    err_etapa_A = err_etapa_A + 1;
-                if (x8  !== 32'd20)   err_etapa_A = err_etapa_A + 1;
-                if (x9  !== 32'd19)   err_etapa_A = err_etapa_A + 1;
-                if (x10 !== 32'd1)    err_etapa_A = err_etapa_A + 1;
-                if (M_x1_0 !== 32'd20) err_etapa_A = err_etapa_A + 1;
-                if (M_x1_4 !== 32'd19) err_etapa_A = err_etapa_A + 1;
-                if (M_x1_8 !== 32'd1)  err_etapa_A = err_etapa_A + 1;
+                if (x2  !== 32'd1)    err_etapa_A = err_etapa_A + 1;
+                if (x3  !== 32'd8)    err_etapa_A = err_etapa_A + 1;
+                if (x4  !== 32'd3)    err_etapa_A = err_etapa_A + 1;
+                if (x5  !== 32'd11)   err_etapa_A = err_etapa_A + 1;
+                if (x6  !== 32'd5)    err_etapa_A = err_etapa_A + 1;
+                if (x7  !== 32'd16)   err_etapa_A = err_etapa_A + 1;
+                if (x8  !== 32'd2)    err_etapa_A = err_etapa_A + 1;
+                if (x9  !== 32'd7)    err_etapa_A = err_etapa_A + 1;
+                if (x10 !== 32'd12)   err_etapa_A = err_etapa_A + 1;
+                if (M_x1_0 !== 32'd11) err_etapa_A = err_etapa_A + 1;
+                if (M_x1_4 !== 32'd5)  err_etapa_A = err_etapa_A + 1;
+                if (M_x1_8 !== 32'd12) err_etapa_A = err_etapa_A + 1;
                 if (err_etapa_A == 0) ok_etapa_A = 1'b1;
                 errores = errores + err_etapa_A;
             end
 
             // ----------------------------------------------------------------
             // 3.2 Fin de Etapa B (incluye preservacion de Etapa A)
+            // x11=11, x12=16, x13=5, x14=12, x15=7, x16=7, x17=16, x18=23
+            // M[x1+0]=11, M[x1+4]=5, M[x1+8]=12, M[x1+12]=7, M[x1+16]=16, M[x1+20]=23
             // ----------------------------------------------------------------
             if (check_etapa_B) begin
                 ciclo_etapa_B = ciclos;
-                if (x11 !== 32'd20) err_etapa_B = err_etapa_B + 1;
-                if (x12 !== 32'd19) err_etapa_B = err_etapa_B + 1;
-                if (x13 !== 32'd39) err_etapa_B = err_etapa_B + 1;
-                if (x14 !== 32'd30) err_etapa_B = err_etapa_B + 1;
-                if (x15 !== 32'd28) err_etapa_B = err_etapa_B + 1;
-                if (x16 !== 32'd2)  err_etapa_B = err_etapa_B + 1;
-                if (x17 !== 32'd69) err_etapa_B = err_etapa_B + 1;
-                if (x18 !== 32'd57) err_etapa_B = err_etapa_B + 1;
-                if (M_x1_0  !== 32'd20) err_etapa_B = err_etapa_B + 1;
-                if (M_x1_4  !== 32'd19) err_etapa_B = err_etapa_B + 1;
-                if (M_x1_8  !== 32'd1)  err_etapa_B = err_etapa_B + 1;
-                if (M_x1_12 !== 32'd39) err_etapa_B = err_etapa_B + 1;
-                if (M_x1_16 !== 32'd69) err_etapa_B = err_etapa_B + 1;
-                if (M_x1_20 !== 32'd57) err_etapa_B = err_etapa_B + 1;
+                if (x1  !== 32'd1536) err_etapa_B = err_etapa_B + 1;
+                if (x2  !== 32'd1)    err_etapa_B = err_etapa_B + 1;
+                if (x3  !== 32'd8)    err_etapa_B = err_etapa_B + 1;
+                if (x4  !== 32'd3)    err_etapa_B = err_etapa_B + 1;
+                if (x5  !== 32'd11)   err_etapa_B = err_etapa_B + 1;
+                if (x6  !== 32'd5)    err_etapa_B = err_etapa_B + 1;
+                if (x7  !== 32'd16)   err_etapa_B = err_etapa_B + 1;
+                if (x8  !== 32'd2)    err_etapa_B = err_etapa_B + 1;
+                if (x9  !== 32'd7)    err_etapa_B = err_etapa_B + 1;
+                if (x10 !== 32'd12)   err_etapa_B = err_etapa_B + 1;
+                if (x11 !== 32'd11)   err_etapa_B = err_etapa_B + 1;
+                if (x12 !== 32'd16)   err_etapa_B = err_etapa_B + 1;
+                if (x13 !== 32'd5)    err_etapa_B = err_etapa_B + 1;
+                if (x14 !== 32'd12)   err_etapa_B = err_etapa_B + 1;
+                if (x15 !== 32'd7)    err_etapa_B = err_etapa_B + 1;
+                if (x16 !== 32'd7)    err_etapa_B = err_etapa_B + 1;
+                if (x17 !== 32'd16)   err_etapa_B = err_etapa_B + 1;
+                if (x18 !== 32'd23)   err_etapa_B = err_etapa_B + 1;
+                if (M_x1_0  !== 32'd11) err_etapa_B = err_etapa_B + 1;
+                if (M_x1_4  !== 32'd5)  err_etapa_B = err_etapa_B + 1;
+                if (M_x1_8  !== 32'd12) err_etapa_B = err_etapa_B + 1;
+                if (M_x1_12 !== 32'd7)  err_etapa_B = err_etapa_B + 1;
+                if (M_x1_16 !== 32'd16) err_etapa_B = err_etapa_B + 1;
+                if (M_x1_20 !== 32'd23) err_etapa_B = err_etapa_B + 1;
                 if (err_etapa_B == 0) ok_etapa_B = 1'b1;
                 errores = errores + err_etapa_B;
             end
 
             // ----------------------------------------------------------------
             // 3.3 Fin de Etapa C
+            // x19=12, x20=12, x21=24, x22=18, x23=0, x24=24, x25=0, x26=6
+            // M[x1+24]=24, M[x1+28]=18, M[x1+32]=24
             // ----------------------------------------------------------------
             if (check_etapa_C) begin
                 ciclo_etapa_C = ciclos;
-                if (x19 !== 32'd78)  err_etapa_C = err_etapa_C + 1;
-                if (x20 !== 32'd13)  err_etapa_C = err_etapa_C + 1;
-                if (x21 !== 32'd209) err_etapa_C = err_etapa_C + 1;
-                if (x22 !== 32'd13)  err_etapa_C = err_etapa_C + 1;
-                if (x23 !== 32'd12)  err_etapa_C = err_etapa_C + 1;
-                if (x24 !== 32'd36)  err_etapa_C = err_etapa_C + 1;
-                if (x25 !== 32'd13)  err_etapa_C = err_etapa_C + 1;
-                if (M_x1_24 !== 32'd78)  err_etapa_C = err_etapa_C + 1;
-                if (M_x1_28 !== 32'd209) err_etapa_C = err_etapa_C + 1;
-                if (M_x1_32 !== 32'd36)  err_etapa_C = err_etapa_C + 1;
+                if (x19 !== 32'd12) err_etapa_C = err_etapa_C + 1;
+                if (x20 !== 32'd12) err_etapa_C = err_etapa_C + 1;
+                if (x21 !== 32'd24) err_etapa_C = err_etapa_C + 1;
+                if (x22 !== 32'd18) err_etapa_C = err_etapa_C + 1;
+                if (x23 !== 32'd0)  err_etapa_C = err_etapa_C + 1;
+                if (x24 !== 32'd24) err_etapa_C = err_etapa_C + 1;
+                if (x25 !== 32'd0)  err_etapa_C = err_etapa_C + 1;
+                if (x26 !== 32'd6)  err_etapa_C = err_etapa_C + 1;
+                if (M_x1_0  !== 32'd11) err_etapa_C = err_etapa_C + 1;
+                if (M_x1_4  !== 32'd5)  err_etapa_C = err_etapa_C + 1;
+                if (M_x1_8  !== 32'd12) err_etapa_C = err_etapa_C + 1;
+                if (M_x1_12 !== 32'd7)  err_etapa_C = err_etapa_C + 1;
+                if (M_x1_16 !== 32'd16) err_etapa_C = err_etapa_C + 1;
+                if (M_x1_20 !== 32'd23) err_etapa_C = err_etapa_C + 1;
+                if (M_x1_24 !== 32'd24) err_etapa_C = err_etapa_C + 1;
+                if (M_x1_28 !== 32'd18) err_etapa_C = err_etapa_C + 1;
+                if (M_x1_32 !== 32'd24) err_etapa_C = err_etapa_C + 1;
                 if (err_etapa_C == 0) ok_etapa_C = 1'b1;
                 errores = errores + err_etapa_C;
             end
 
             // ----------------------------------------------------------------
             // 3.4 Fin de Etapa D (Estado final completo de registros y memoria)
+            // x19=6, x20=6, x21=24, x22=18, x24=24, x25=4, x26=4, x27=1560,
+            // x28=74, x29=4, x30=23, x31=1
+            // M[x1+36]=74, M[x1+40]=4, M[x1+44]=0, M[x1+48]=1, M[x1+52]=1
             // ----------------------------------------------------------------
             if (check_etapa_D) begin
                 ciclo_etapa_D = ciclos;
-                if (x26 !== 32'd126) err_etapa_D = err_etapa_D + 1;
-                if (x27 !== 32'd209) err_etapa_D = err_etapa_D + 1;
-                if (x28 !== 32'd142) err_etapa_D = err_etapa_D + 1;
-                if (x29 !== 32'd285) err_etapa_D = err_etapa_D + 1;
-                if (x30 !== 32'd78)  err_etapa_D = err_etapa_D + 1;
-                if (x31 !== 32'd363) err_etapa_D = err_etapa_D + 1;
-                if (M_x1_0  !== 32'd20)  err_etapa_D = err_etapa_D + 1;
-                if (M_x1_4  !== 32'd19)  err_etapa_D = err_etapa_D + 1;
-                if (M_x1_8  !== 32'd1)   err_etapa_D = err_etapa_D + 1;
-                if (M_x1_12 !== 32'd39)  err_etapa_D = err_etapa_D + 1;
-                if (M_x1_16 !== 32'd69)  err_etapa_D = err_etapa_D + 1;
-                if (M_x1_20 !== 32'd57)  err_etapa_D = err_etapa_D + 1;
-                if (M_x1_24 !== 32'd78)  err_etapa_D = err_etapa_D + 1;
-                if (M_x1_28 !== 32'd209) err_etapa_D = err_etapa_D + 1;
-                if (M_x1_32 !== 32'd36)  err_etapa_D = err_etapa_D + 1;
-                if (M_x1_36 !== 32'd126) err_etapa_D = err_etapa_D + 1;
-                if (M_x1_40 !== 32'd209) err_etapa_D = err_etapa_D + 1;
-                if (M_x1_44 !== 32'd142) err_etapa_D = err_etapa_D + 1;
-                if (M_x1_48 !== 32'd285) err_etapa_D = err_etapa_D + 1;
-                if (M_x1_52 !== 32'd363) err_etapa_D = err_etapa_D + 1;
+                if (x1  !== 32'd1536) err_etapa_D = err_etapa_D + 1;
+                if (x2  !== 32'd1)    err_etapa_D = err_etapa_D + 1;
+                if (x3  !== 32'd8)    err_etapa_D = err_etapa_D + 1;
+                if (x4  !== 32'd3)    err_etapa_D = err_etapa_D + 1;
+                if (x5  !== 32'd11)   err_etapa_D = err_etapa_D + 1;
+                if (x6  !== 32'd5)    err_etapa_D = err_etapa_D + 1;
+                if (x7  !== 32'd16)   err_etapa_D = err_etapa_D + 1;
+                if (x8  !== 32'd2)    err_etapa_D = err_etapa_D + 1;
+                if (x9  !== 32'd7)    err_etapa_D = err_etapa_D + 1;
+                if (x10 !== 32'd12)   err_etapa_D = err_etapa_D + 1;
+                if (x11 !== 32'd11)   err_etapa_D = err_etapa_D + 1;
+                if (x12 !== 32'd16)   err_etapa_D = err_etapa_D + 1;
+                if (x13 !== 32'd5)    err_etapa_D = err_etapa_D + 1;
+                if (x14 !== 32'd12)   err_etapa_D = err_etapa_D + 1;
+                if (x15 !== 32'd7)    err_etapa_D = err_etapa_D + 1;
+                if (x16 !== 32'd7)    err_etapa_D = err_etapa_D + 1;
+                if (x17 !== 32'd16)   err_etapa_D = err_etapa_D + 1;
+                if (x18 !== 32'd23)   err_etapa_D = err_etapa_D + 1;
+                if (x19 !== 32'd6)    err_etapa_D = err_etapa_D + 1;
+                if (x20 !== 32'd6)    err_etapa_D = err_etapa_D + 1;
+                if (x21 !== 32'd24)   err_etapa_D = err_etapa_D + 1;
+                if (x22 !== 32'd18)   err_etapa_D = err_etapa_D + 1;
+                if (x23 !== 32'd0)    err_etapa_D = err_etapa_D + 1;
+                if (x24 !== 32'd24)   err_etapa_D = err_etapa_D + 1;
+                if (x25 !== 32'd4)    err_etapa_D = err_etapa_D + 1;
+                if (x26 !== 32'd4)    err_etapa_D = err_etapa_D + 1;
+                if (x27 !== 32'd1560) err_etapa_D = err_etapa_D + 1;
+                if (x28 !== 32'd74)   err_etapa_D = err_etapa_D + 1;
+                if (x29 !== 32'd4)    err_etapa_D = err_etapa_D + 1;
+                if (x30 !== 32'd23)   err_etapa_D = err_etapa_D + 1;
+                if (x31 !== 32'd1)    err_etapa_D = err_etapa_D + 1;
+                if (M_x1_0  !== 32'd11) err_etapa_D = err_etapa_D + 1;
+                if (M_x1_4  !== 32'd5)  err_etapa_D = err_etapa_D + 1;
+                if (M_x1_8  !== 32'd12) err_etapa_D = err_etapa_D + 1;
+                if (M_x1_12 !== 32'd7)  err_etapa_D = err_etapa_D + 1;
+                if (M_x1_16 !== 32'd16) err_etapa_D = err_etapa_D + 1;
+                if (M_x1_20 !== 32'd23) err_etapa_D = err_etapa_D + 1;
+                if (M_x1_24 !== 32'd24) err_etapa_D = err_etapa_D + 1;
+                if (M_x1_28 !== 32'd18) err_etapa_D = err_etapa_D + 1;
+                if (M_x1_32 !== 32'd24) err_etapa_D = err_etapa_D + 1;
+                if (M_x1_36 !== 32'd74) err_etapa_D = err_etapa_D + 1;
+                if (M_x1_40 !== 32'd4)  err_etapa_D = err_etapa_D + 1;
+                if (M_x1_44 !== 32'd0)  err_etapa_D = err_etapa_D + 1;
+                if (M_x1_48 !== 32'd1)  err_etapa_D = err_etapa_D + 1;
+                if (M_x1_52 !== 32'd1)  err_etapa_D = err_etapa_D + 1;
                 if (err_etapa_D == 0) ok_etapa_D = 1'b1;
                 errores = errores + err_etapa_D;
             end
@@ -419,6 +473,7 @@ module tb_ef_oficial_compare;
 
     wire [31:0] mem_conf_dual     = cfg_dual_issue.mem_conflicts;
     wire [31:0] mem_conf_opt      = cfg_optimizado.mem_conflicts;
+    wire [31:0] mem_stalls_opt    = cfg_optimizado.mem_stalls;
     wire [31:0] cache_hits_opt    = cfg_optimizado.cache_hits;
     wire [31:0] cache_acc_opt     = cfg_optimizado.cache_accesses;
     wire [31:0] dual_mem_opt      = cfg_optimizado.dual_mem_pairs;
@@ -471,6 +526,8 @@ module tb_ef_oficial_compare;
                  cfg_pipeline.instr_retiradas, cfg_dual_issue.instr_retiradas, cfg_optimizado.instr_retiradas);
         $display(" Conflictos de memoria    |             - | %15d | %15d",
                  cfg_dual_issue.mem_conflicts, cfg_optimizado.mem_conflicts);
+        $display(" Ciclos de MemStall (L1)  |             0 |               0 | %15d",
+                 cfg_optimizado.mem_stalls);
         $display(" Pares dual-mem (Cache L1)|             - |               0 | %15d",
                  cfg_optimizado.dual_mem_pairs);
         $display(" Cache L1 Hits / Accesos  |             - |               - | %7d / %5d",

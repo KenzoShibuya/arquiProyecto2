@@ -282,7 +282,7 @@ module datapath #(
   flopenrc #(1)  memwrite_m2_reg  (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(MemWriteE2),  .q(MemWriteM2));
   flopenrc #(32) aluresult_m2_reg (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(ALUResultE2), .q(ALUResultM2));
   flopenrc #(32) writedata_m2_reg (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(WriteDataE2), .q(WriteDataM2));
-  flopenrc #(5)  rdm2_reg         (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(RdE2),        .q(RdE2));
+  flopenrc #(5)  rdm2_reg         (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(RdE2),        .q(RdM2));
   flopenrc #(32) pcplus4m2_reg    (.clk(clk), .reset(reset), .clear(FlushM2), .en(~MemStall), .d(PCPlus4E2),   .q(PCPlus4M2));
 
 

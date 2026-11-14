@@ -18,6 +18,7 @@ module tb_ef_core #(
     parameter ENABLE_DCACHE = 1,
     parameter SINGLE_ISSUE  = 0,
     parameter [31:0] DONE_PC = 32'h000000e8,
+    parameter [31:0] LAST_PC = 32'h000000e4, // 0x0e4: sw x23, 48(x20) (ultimo sw antes de done)
     parameter [31:0] FIRST0  = 32'h04000a13,
     parameter [31:0] FIRST1  = 32'h00300913
 );
@@ -149,15 +150,50 @@ module tb_ef_core #(
     wire [31:0] x22 = dut.rvpipe.dp.rf.rf[22];
     wire [31:0] x23 = dut.rvpipe.dp.rf.rf[23];
 
-    integer ciclos, ciclos_utiles, dual_issue, single_issue;
+    // ------------------------------------------------------------------------
+    // Seguimiento de instrucciones retiradas en WB (misma frontera que tb_ef_oficial)
+    // ------------------------------------------------------------------------
+    reg        validE1, validE2, validM1, validM2, validW1, validW2;
+    reg [31:0] PCM1, PCM2, PCW1, PCW2;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            validE1 <= 1'b0;
+            validE2 <= 1'b0;
+            validM1 <= 1'b0;
+            validM2 <= 1'b0;
+            validW1 <= 1'b0;
+            validW2 <= 1'b0;
+            PCM1    <= 32'b0;
+            PCM2    <= 32'b0;
+            PCW1    <= 32'b0;
+            PCW2    <= 32'b0;
+        end else if (!MemStall) begin
+            validE1 <= FlushE  ? 1'b0 : (InstrD != 32'b0);
+            validE2 <= FlushE  ? 1'b0 : (IssueSlot2D && (InstrD2 != 32'b0));
+            validM1 <= validE1;
+            validM2 <= FlushM2 ? 1'b0 : validE2;
+            PCM1    <= PCE;
+            PCM2    <= PCE2;
+            validW1 <= validM1;
+            validW2 <= validM2;
+            PCW1    <= PCM1;
+            PCW2    <= PCM2;
+        end
+    end
+
+    integer ciclos, ciclos_totales, ciclos_utiles, instr_retiradas;
+    integer dual_issue, single_issue;
     integer raw_conflicts, mem_conflicts, ctrl_conflicts;
     integer stalls, mem_stalls, flushes;
-    integer done_seen, errores, finalizado;
+    integer done_seen, fin_wb_seen, errores, finalizado;
 
     initial begin
         reset = 1;
         ciclos = 0;
+        ciclos_totales = 0;
         ciclos_utiles = 0;
+        instr_retiradas = 0;
         dual_issue = 0;
         single_issue = 0;
         raw_conflicts = 0;
@@ -167,6 +203,7 @@ module tb_ef_core #(
         mem_stalls = 0;
         flushes = 0;
         done_seen = 0;
+        fin_wb_seen = 0;
         errores = 0;
         finalizado = 0;
 
@@ -182,22 +219,40 @@ module tb_ef_core #(
     always @(posedge clk) begin
         if (!reset && !finalizado) begin
             ciclos = ciclos + 1;
-            if (!MemStall && !FlushE && !StallD && IssueSlot2D && (InstrD != 0) && (InstrD2 != 0))
-                dual_issue = dual_issue + 1;
-            if (!MemStall && !FlushE && !StallD && !IssueSlot2D && (InstrD != 0))
-                single_issue = single_issue + 1;
-            if (!MemStall && !StallD && (InstrD != 0) && (InstrD2 != 0)) begin
-                if (raw_conflict)  raw_conflicts  = raw_conflicts  + 1;
-                if (mem_conflict)  mem_conflicts  = mem_conflicts  + 1;
-                if (ctrl_conflict) ctrl_conflicts = ctrl_conflicts + 1;
+
+            if (!fin_wb_seen) begin
+                if (StallF)   stalls     = stalls     + 1;
+                if (MemStall) mem_stalls = mem_stalls + 1;
             end
-            if (StallF)   stalls     = stalls     + 1;
-            if (MemStall) mem_stalls = mem_stalls + 1;
-            if (FlushD)   flushes    = flushes    + 1;
+
+            // Conteo de instrucciones retiradas y ciclos utiles (misma frontera que tb_ef_oficial:
+            // cuando el ultimo 'sw' en LAST_PC = 0xe4 pasa de MEM a WB)
+            if (!MemStall && !fin_wb_seen) begin
+                if (validM1 && (PCM1 != DONE_PC))
+                    instr_retiradas = instr_retiradas + 1;
+                if (validM2 && (PCM2 != DONE_PC))
+                    instr_retiradas = instr_retiradas + 1;
+                if ((validM1 && PCM1 == LAST_PC) || (validM2 && PCM2 == LAST_PC)) begin
+                    ciclos_totales = ciclos;
+                    ciclos_utiles  = ciclos;
+                    fin_wb_seen    = 1;
+                end
+            end
+
+            if (!MemStall && (done_seen == 0)) begin
+                if (!FlushE && !StallD && IssueSlot2D && (InstrD != 0) && (InstrD2 != 0))
+                    dual_issue = dual_issue + 1;
+                if (!FlushE && !StallD && !IssueSlot2D && (InstrD != 0))
+                    single_issue = single_issue + 1;
+                if (!StallD && (InstrD != 0) && (InstrD2 != 0)) begin
+                    if (raw_conflict)  raw_conflicts  = raw_conflicts  + 1;
+                    if (mem_conflict)  mem_conflicts  = mem_conflicts  + 1;
+                    if (ctrl_conflict) ctrl_conflicts = ctrl_conflicts + 1;
+                end
+                if (FlushD)   flushes    = flushes    + 1;
+            end
 
             if (!MemStall && ((PCSrcE1 && PCE == DONE_PC) || (PCSrcE2 && PCE2 == DONE_PC))) begin
-                if (done_seen == 0)
-                    ciclos_utiles = ciclos;
                 done_seen = done_seen + 1;
             end
         end
@@ -260,8 +315,12 @@ module tb_ef_compare_all;
     wire [31:0] ciclos_utiles_A  = cfg_A_single.ciclos_utiles;
     wire [31:0] ciclos_utiles_B  = cfg_B_dual_base.ciclos_utiles;
     wire [31:0] ciclos_utiles_C  = cfg_C_dual_cache.ciclos_utiles;
+    wire [31:0] instr_A          = cfg_A_single.instr_retiradas;
+    wire [31:0] instr_B          = cfg_B_dual_base.instr_retiradas;
+    wire [31:0] instr_C          = cfg_C_dual_cache.instr_retiradas;
     wire [31:0] mem_conflicts_B  = cfg_B_dual_base.mem_conflicts;
     wire [31:0] mem_conflicts_C  = cfg_C_dual_cache.mem_conflicts;
+    wire [31:0] mem_stalls_C     = cfg_C_dual_cache.mem_stalls;
     wire [31:0] cache_hits_C     = cfg_C_dual_cache.cache_hits;
     wire [31:0] cache_accesses_C = cfg_C_dual_cache.cache_accesses;
     wire [31:0] dual_mem_pairs_C = cfg_C_dual_cache.dual_mem_pairs;
@@ -285,19 +344,26 @@ module tb_ef_compare_all;
                 cfg_B_dual_base.dut.rvpipe.dp.rf.rf[idx] !== cfg_C_dual_cache.dut.rvpipe.dp.rf.rf[idx])
                 diff_errors = diff_errors + 1;
         end
-        $display("====================================================================");
+        $display("================================================================================");
         $display(" COMPARACION ENTREGA FINAL (EF) - prog10_cache_eval");
-        $display("====================================================================");
-        $display(" Config A (Single-Issue E1)    : %0d ciclos (utiles: %0d), errores=%0d",
-                 cfg_A_single.ciclos, cfg_A_single.ciclos_utiles, cfg_A_single.errores);
-        $display(" Config B (Dual-Issue Base E2) : %0d ciclos (utiles: %0d), mem_conflicts=%0d, errores=%0d",
-                 cfg_B_dual_base.ciclos, cfg_B_dual_base.ciclos_utiles, cfg_B_dual_base.mem_conflicts, cfg_B_dual_base.errores);
-        $display(" Config C (Dual-Issue + L1 EF) : %0d ciclos (utiles: %0d), mem_conflicts=%0d, hits=%0d/%0d, dual_mem=%0d, errores=%0d",
-                 cfg_C_dual_cache.ciclos, cfg_C_dual_cache.ciclos_utiles, cfg_C_dual_cache.mem_conflicts,
-                 cfg_C_dual_cache.cache_hits, cfg_C_dual_cache.cache_accesses,
-                 cfg_C_dual_cache.dual_mem_pairs, cfg_C_dual_cache.errores);
-        $display(" Equivalencia funcional A == B == C : diff_errors = %0d", diff_errors);
-        $display("====================================================================");
+        $display("================================================================================");
+        $display(" Metrica                  | Pipeline (E1) | Dual-Issue (E2) | Optimizado (EF)");
+        $display("--------------------------+---------------+-----------------+----------------");
+        $display(" Ciclos totales (sin done)| %13d | %15d | %15d",
+                 cfg_A_single.ciclos_totales, cfg_B_dual_base.ciclos_totales, cfg_C_dual_cache.ciclos_totales);
+        $display(" Instrucciones retiradas  | %13d | %15d | %15d",
+                 cfg_A_single.instr_retiradas, cfg_B_dual_base.instr_retiradas, cfg_C_dual_cache.instr_retiradas);
+        $display(" Conflictos de memoria    |             - | %15d | %15d",
+                 cfg_B_dual_base.mem_conflicts, cfg_C_dual_cache.mem_conflicts);
+        $display(" Ciclos de MemStall (L1)  |             0 |               0 | %15d",
+                 cfg_C_dual_cache.mem_stalls);
+        $display(" Pares dual-mem (Cache L1)|             - |               0 | %15d",
+                 cfg_C_dual_cache.dual_mem_pairs);
+        $display(" Cache L1 Hits / Accesos  |             - |               - | %7d / %5d",
+                 cfg_C_dual_cache.cache_hits, cfg_C_dual_cache.cache_accesses);
+        $display(" Errores / Diff A==B==C   | %13d | %15d | %7d (diff=%0d)",
+                 cfg_A_single.errores, cfg_B_dual_base.errores, cfg_C_dual_cache.errores, diff_errors);
+        $display("================================================================================");
         $finish;
     end
 endmodule
